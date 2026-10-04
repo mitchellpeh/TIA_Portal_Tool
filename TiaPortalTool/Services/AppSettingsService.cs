@@ -19,6 +19,9 @@ public sealed class AppSettings
     public bool ExportBlocks { get; set; } = true;
     public bool CompileBeforeExport { get; set; }
     public bool ExportHmi { get; set; }
+
+    /// <summary>Settings window: the Windows 95 style instead of the modern one.</summary>
+    public bool Win95Style { get; set; }
 }
 
 public sealed class AppSettingsService

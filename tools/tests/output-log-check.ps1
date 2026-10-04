@@ -36,6 +36,11 @@ function Hex($text) { (New-Object System.Windows.Media.BrushConverter).ConvertFr
 
 # Same look as the windows' Output card (CardStyle) and log box.
 $window = New-Object System.Windows.Window -Property @{ Title = "Output log check"; Width = 900; Height = 420; Background = (Hex "#0f172a"); WindowStartupLocation = "CenterScreen" }
+# OutputLog colours its lines and the pulse from the theme resources; give the bare window the Modern theme.
+foreach ($theme in "Palette.Modern.xaml", "Shapes.Modern.xaml") {
+  $stream = [IO.File]::OpenRead("$repo\TiaPortalTool\Themes\$theme")
+  try { $window.Resources.MergedDictionaries.Add([System.Windows.Markup.XamlReader]::Load($stream)) } finally { $stream.Dispose() }
+}
 $card = New-Object System.Windows.Controls.Border -Property @{ Background = (Hex "#111827"); BorderBrush = (Hex "#334155"); BorderThickness = 1; CornerRadius = 10; Padding = "16,12,16,16"; Margin = 20 }
 $box = New-Object System.Windows.Controls.RichTextBox -Property @{ IsReadOnly = $true; Background = (Hex "#020617"); Foreground = (Hex "#cbd5e1"); BorderBrush = (Hex "#1e293b"); Padding = 6 }
 $card.Child = $box; $window.Content = $card

@@ -1,0 +1,22 @@
+<Window x:Class="TiaPortalTool.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings" Width="420" SizeToContent="Height" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner" Style="{StaticResource ToolWindow}" Icon="app.ico"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <StackPanel Margin="20,18,20,16">
+        <TextBlock Text="Settings" Style="{StaticResource WindowTitle}" Margin="0,0,0,12"/>
+        <Border Style="{StaticResource CardStyle}" Padding="16,14">
+            <StackPanel>
+                <TextBlock Text="Style" Style="{StaticResource SubHeader}"/>
+                <TextBlock Text="Changes apply straight away, to every open window, and are remembered." Style="{StaticResource HintText}"/>
+                <WrapPanel Margin="0,10,0,0">
+                    <RadioButton x:Name="ModernRadio" GroupName="Style" Content="Modern" Style="{StaticResource OptionRadio}" Checked="Style_Changed"/>
+                    <RadioButton x:Name="Win95Radio" GroupName="Style" Content="Windows 95" Style="{StaticResource OptionRadio}" Checked="Style_Changed"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+        <Button x:Name="CloseButton" Content="Close" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right" Margin="0,14,0,0"
+                IsDefault="True" Click="Close_Click"/>
+    </StackPanel>
+</Window>

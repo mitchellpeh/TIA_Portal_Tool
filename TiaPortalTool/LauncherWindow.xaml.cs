@@ -25,9 +25,25 @@ public partial class LauncherWindow : Window
         text.Text = "v" + version;
         if (!version.StartsWith("0.", System.StringComparison.Ordinal))
         {
-            badge.Background = new SolidColorBrush(Color.FromRgb(0x14, 0x53, 0x2d));
-            text.Foreground = new SolidColorBrush(Color.FromRgb(0xbb, 0xf7, 0xd0));
+            badge.SetResourceReference(Border.BackgroundProperty, "Badge.Done.Background");
+            text.SetResourceReference(TextBlock.ForegroundProperty, "Badge.Done.Foreground");
         }
+    }
+
+    private SettingsWindow? _settings;
+
+    // Not modal: the start-up screen stays live behind it, so a style change shows on both at once.
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings is { IsVisible: true })
+        {
+            _settings.Activate();
+            return;
+        }
+
+        _settings = new SettingsWindow { Owner = this };
+        _settings.Closed += (_, _) => _settings = null;
+        _settings.Show();
     }
 
     private void ImportExport_Click(object sender, RoutedEventArgs e) => OpenTool(new MainWindow());

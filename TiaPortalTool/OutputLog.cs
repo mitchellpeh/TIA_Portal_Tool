@@ -22,11 +22,12 @@ public enum RunResult { Success, Warnings, Problems, Failed, Cancelled }
 /// </summary>
 public sealed class OutputLog
 {
-    public static readonly Brush TextBrush = Frozen("#cbd5e1");
-    public static readonly Brush TimestampBrush = Frozen("#64748b");
-    public static readonly Brush SuccessBrush = Frozen("#4ade80");
-    public static readonly Brush WarningBrush = Frozen("#fbbf24");
-    public static readonly Brush ErrorBrush = Frozen("#f87171");
+    // Theme resource keys (ThemeManager). Runs use SetResourceReference, so a theme change recolours the whole log.
+    public const string TextBrush = "Log.Text";
+    public const string TimestampBrush = "Log.Time";
+    public const string SuccessBrush = "Log.Success";
+    public const string WarningBrush = "Log.Warning";
+    public const string ErrorBrush = "Log.Error";
 
     // TIA normally starts here in 20-40 s once this exe is approved; a slow PC can take a minute or two.
     private static readonly TimeSpan StartingStallDelay = TimeSpan.FromMinutes(2);
@@ -52,10 +53,10 @@ public sealed class OutputLog
         _card = card;
         _box.Document = new FlowDocument(_paragraph)
         {
-            FontFamily = new FontFamily("Consolas"),
             FontSize = 12,
             PagePadding = new Thickness(0)
         };
+        _box.Document.SetResourceReference(FlowDocument.FontFamilyProperty, "Font.Mono");
     }
 
     /// <summary>Each line as written, "[HH:mm:ss] text", for log files.</summary>
@@ -86,8 +87,8 @@ public sealed class OutputLog
             var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
             _lines.Add(stamped);
             LineWritten?.Invoke(stamped);
-            _paragraph.Inlines.Add(new Run(stamped.Substring(0, 11)) { Foreground = TimestampBrush });
-            _paragraph.Inlines.Add(new Run(line) { Foreground = BrushFor(lineLevel) });
+            _paragraph.Inlines.Add(Colored(new Run(stamped.Substring(0, 11)), TimestampBrush));
+            _paragraph.Inlines.Add(Colored(new Run(line), BrushFor(lineLevel)));
             _paragraph.Inlines.Add(new LineBreak());
             Watch(line, lineLevel);
         }
@@ -115,8 +116,8 @@ public sealed class OutputLog
         var stamped = $"[{DateTime.Now:HH:mm:ss}] {line}";
         _lines.Add(stamped);
         LineWritten?.Invoke(stamped);
-        _paragraph.Inlines.Add(new Run(stamped.Substring(0, 11)) { Foreground = TimestampBrush });
-        _paragraph.Inlines.Add(new Run(line) { Foreground = brush, FontWeight = FontWeights.Bold });
+        _paragraph.Inlines.Add(Colored(new Run(stamped.Substring(0, 11)), TimestampBrush));
+        _paragraph.Inlines.Add(Colored(new Run(line) { FontWeight = FontWeights.Bold }, brush));
         _paragraph.Inlines.Add(new LineBreak());
         EndRun();
         _box.ScrollToEnd();
@@ -202,18 +203,18 @@ public sealed class OutputLog
         if (!NeedsAttention)
         {
             NeedsAttention = true;
-            var border = new SolidColorBrush(Color.FromRgb(0x33, 0x41, 0x55));
-            var background = new SolidColorBrush(Color.FromRgb(0x11, 0x18, 0x27));
+            var border = new SolidColorBrush(ThemeColor("Card.Border"));
+            var background = new SolidColorBrush(ThemeColor("Card.Background"));
             _card.BorderBrush = border;
             _card.Background = background;
             _card.BorderThickness = new Thickness(2);
             var pulse = TimeSpan.FromMilliseconds(700);
-            border.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0xfb, 0xbf, 0x24), pulse)
+            border.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(ThemeColor("Pulse.Border"), pulse)
             {
                 AutoReverse = true,
                 RepeatBehavior = RepeatBehavior.Forever
             });
-            background.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(Color.FromRgb(0x3a, 0x2e, 0x0c), pulse)
+            background.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation(ThemeColor("Pulse.Background"), pulse)
             {
                 AutoReverse = true,
                 RepeatBehavior = RepeatBehavior.Forever
@@ -279,7 +280,8 @@ public sealed class OutputLog
         return LogLevel.Info;
     }
 
-    public static Brush BrushFor(LogLevel level) => level switch
+    /// <summary>The theme resource key for a log level.</summary>
+    public static string BrushFor(LogLevel level) => level switch
     {
         LogLevel.Success => SuccessBrush,
         LogLevel.Warning => WarningBrush,
@@ -289,11 +291,13 @@ public sealed class OutputLog
 
     private static bool Contains(string text, string value) => text.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
 
-    private static Brush Frozen(string hex)
+    // Looked up through the window (which reaches the app's theme), so the log also works in a bare test window.
+    private Color ThemeColor(string key) => ((SolidColorBrush)_window.FindResource(key)).Color;
+
+    private static Run Colored(Run run, string key)
     {
-        var brush = (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        brush.Freeze();
-        return brush;
+        run.SetResourceReference(TextElement.ForegroundProperty, key);
+        return run;
     }
 
     // ---- Taskbar flash, so a prompt behind other windows still gets noticed ----

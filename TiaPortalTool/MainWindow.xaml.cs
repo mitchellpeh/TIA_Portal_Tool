@@ -33,12 +33,13 @@ public partial class MainWindow : Window
         public IReadOnlyList<string> Messages { get; }
     }
 
-    private static readonly Brush TextBrush = Frozen("#cbd5e1");
-    private static readonly Brush MutedBrush = Frozen("#94a3b8");
-    private static readonly Brush SuccessBrush = Frozen("#4ade80");
-    private static readonly Brush WarningBrush = Frozen("#fbbf24");
-    private static readonly Brush ErrorBrush = Frozen("#f87171");
-    private static readonly Brush InputBorderBrush = Frozen("#334155");
+    // Theme resource keys (ThemeManager); set with SetResourceReference so a theme change recolours them.
+    private const string TextBrush = "Text.Body";
+    private const string MutedBrush = "Text.Muted";
+    private const string SuccessBrush = "Hint.Success";
+    private const string WarningBrush = "Hint.Warning";
+    private const string ErrorBrush = "Hint.Error";
+    private const string InputBorderBrush = "Input.Border";
 
     private readonly OpennessProjectProbe _probe = new();
     private readonly TiaSessionService _sessionService = new();
@@ -137,17 +138,17 @@ public partial class MainWindow : Window
             }
         }
 
-        _appSettingsService.Save(new AppSettings
-        {
-            ProjectPath = ProjectPathTextBox.Text?.Trim() ?? string.Empty,
-            OutputDirectory = _legacyOutputDirectory,
-            ExportFolders = new Dictionary<string, string>(_exportFolders),
-            ImportFolders = new Dictionary<string, string>(_importFolders),
-            ExportTags = ExportTagsCheckBox.IsChecked == true,
-            ExportBlocks = ExportCommentsCheckBox.IsChecked == true,
-            CompileBeforeExport = CompileBeforeExportCheckBox.IsChecked == true,
-            ExportHmi = ExportHmiCheckBox.IsChecked == true
-        });
+        // Update the saved settings rather than replacing them, so settings this window doesn't own (the theme) survive.
+        var settings = _appSettingsService.Load();
+        settings.ProjectPath = ProjectPathTextBox.Text?.Trim() ?? string.Empty;
+        settings.OutputDirectory = _legacyOutputDirectory;
+        settings.ExportFolders = new Dictionary<string, string>(_exportFolders);
+        settings.ImportFolders = new Dictionary<string, string>(_importFolders);
+        settings.ExportTags = ExportTagsCheckBox.IsChecked == true;
+        settings.ExportBlocks = ExportCommentsCheckBox.IsChecked == true;
+        settings.CompileBeforeExport = CompileBeforeExportCheckBox.IsChecked == true;
+        settings.ExportHmi = ExportHmiCheckBox.IsChecked == true;
+        _appSettingsService.Save(settings);
     }
 
     // ---- Project and output folder ----
@@ -276,11 +277,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SetProjectHint(string text, Brush foreground, Brush border)
+    private void SetProjectHint(string text, string foreground, string border)
     {
         ProjectHintText.Text = text;
-        ProjectHintText.Foreground = foreground;
-        ProjectPathTextBox.BorderBrush = border;
+        ProjectHintText.SetResourceReference(TextBlock.ForegroundProperty, foreground);
+        ProjectPathTextBox.SetResourceReference(Control.BorderBrushProperty, border);
     }
 
     private void UpdateOutputHint()
@@ -593,7 +594,7 @@ public partial class MainWindow : Window
         OpenResultFolderButton.Visibility = Visibility.Collapsed;
         _resultFolder = null;
         StatusBarText.Text = busyText;
-        StatusBarText.Foreground = TextBrush;
+        StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, TextBrush);
         var logPath = logDirectory is null ? null : StartLogFile(logDirectory, actionName);
         AppendLog(busyText);
         if (logPath is not null)
@@ -698,7 +699,7 @@ public partial class MainWindow : Window
         AppendLog("Cancelling: the run stops after the current step, and nothing is saved. Starting TIA Portal, "
                   + "opening the project, and compiling can't be interrupted, so this can take a while.", LogLevel.Warning);
         StatusBarText.Text = "Cancelling after the current step. Nothing will be saved.";
-        StatusBarText.Foreground = WarningBrush;
+        StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, WarningBrush);
     }
 
     private string? RequireProject(string verb)
@@ -752,7 +753,7 @@ public partial class MainWindow : Window
     {
         ShowBadge(null);
         StatusBarText.Text = text;
-        StatusBarText.Foreground = WarningBrush;
+        StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, WarningBrush);
     }
 
     private void ShowBadge(Outcome? outcome)
@@ -765,15 +766,15 @@ public partial class MainWindow : Window
 
         var (text, background, foreground) = outcome switch
         {
-            Outcome.Success => ("DONE", "#14532d", "#bbf7d0"),
-            Outcome.Warning => ("WARNINGS", "#78350f", "#fde68a"),
-            Outcome.Cancelled => ("CANCELLED", "#334155", "#e2e8f0"),
-            _ => ("FAILED", "#7f1d1d", "#fecaca")
+            Outcome.Success => ("DONE", "Badge.Done.Background", "Badge.Done.Foreground"),
+            Outcome.Warning => ("WARNINGS", "Badge.Pre.Background", "Badge.Pre.Foreground"),
+            Outcome.Cancelled => ("CANCELLED", "Badge.Neutral.Background", "Badge.Neutral.Foreground"),
+            _ => ("FAILED", "Badge.Fail.Background", "Badge.Fail.Foreground")
         };
 
         ResultBadgeText.Text = text;
-        ResultBadgeText.Foreground = Frozen(foreground);
-        ResultBadge.Background = Frozen(background);
+        ResultBadgeText.SetResourceReference(TextBlock.ForegroundProperty, foreground);
+        ResultBadge.SetResourceReference(Border.BackgroundProperty, background);
         ResultBadge.Visibility = Visibility.Visible;
     }
 
@@ -794,7 +795,7 @@ public partial class MainWindow : Window
             if (_cancellation?.IsCancellationRequested != true)
             {
                 StatusBarText.Text = step;
-                StatusBarText.Foreground = TextBrush;
+                StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, TextBrush);
             }
         }
     }
@@ -805,7 +806,7 @@ public partial class MainWindow : Window
         if (reason is not null)
         {
             StatusBarText.Text = reason;
-            StatusBarText.Foreground = WarningBrush;
+            StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, WarningBrush);
         }
     }
 
@@ -827,7 +828,7 @@ public partial class MainWindow : Window
         {
             Clipboard.SetText(_log.Text);
             StatusBarText.Text = $"Copied {_log.LineCount} log line(s) to the clipboard.";
-            StatusBarText.Foreground = TextBrush;
+            StatusBarText.SetResourceReference(TextBlock.ForegroundProperty, TextBrush);
         }
         catch (Exception ex)
         {
@@ -894,10 +895,4 @@ public partial class MainWindow : Window
         }
     }
 
-    private static Brush Frozen(string hex)
-    {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-        brush.Freeze();
-        return brush;
-    }
 }
