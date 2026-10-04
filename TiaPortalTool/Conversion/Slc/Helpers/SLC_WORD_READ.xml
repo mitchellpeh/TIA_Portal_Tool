@@ -1,0 +1,211 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Document>
+  <Engineering version="V20" />
+  <DocumentInfo>
+    <Created>2026-10-03T18:54:34.3273041Z</Created>
+    <ExportSetting>WithDefaults</ExportSetting>
+    <InstalledProducts>
+      <Product>
+        <DisplayName>Totally Integrated Automation Portal</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>TIA Portal Openness</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>TIA Portal Version Control Interface</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>SINAMICS Startdrive Advanced</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>SINAMICS Startdrive G110M, G120, G120C, G120D, G120P, G115D</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>SINAMICS Startdrive G130, G150, S120, S150, SINAMICS MV, G220, S200, S210</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>STEP 7 Professional</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>STEP 7 Safety</DisplayName>
+        <DisplayVersion>V20 Update 2</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>WinCC Basic/Comfort/Advanced</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <Product>
+        <DisplayName>WinCC Unified</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+    </InstalledProducts>
+  </DocumentInfo>
+  <SW.Blocks.FC ID="0">
+    <AttributeList>
+      <AutoNumber>true</AutoNumber>
+      <HeaderAuthor />
+      <HeaderFamily />
+      <HeaderName />
+      <HeaderVersion>0.1</HeaderVersion>
+      <Interface><Sections xmlns="http://www.siemens.com/automation/Openness/SW/Interface/v5">
+  <Section Name="Input">
+    <Member Name="File" Datatype="DInt" Accessibility="Public">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Bit file number (3 for B3)</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="Element" Datatype="DInt" Accessibility="Public">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Word number (16 for B3:16)</MultiLanguageText>
+      </Comment>
+    </Member>
+  </Section>
+  <Section Name="Output" />
+  <Section Name="InOut" />
+  <Section Name="Temp" />
+  <Section Name="Constant" />
+  <Section Name="Return">
+    <Member Name="Ret_Val" Datatype="Int" Accessibility="Public" />
+  </Section>
+</Sections></Interface>
+      <IsIECCheckEnabled>false</IsIECCheckEnabled>
+      <MemoryLayout>Optimized</MemoryLayout>
+      <Name>SLC_WORD_READ</Name>
+      <Namespace />
+      <Number>14</Number>
+      <ProgrammingLanguage>SCL</ProgrammingLanguage>
+      <SetENOAutomatically>false</SetENOAutomatically>
+      <UDABlockProperties />
+      <UDAEnableTagReadback>false</UDAEnableTagReadback>
+    </AttributeList>
+    <ObjectList>
+      <MultilingualText ID="1" CompositionName="Comment">
+        <ObjectList>
+          <MultilingualTextItem ID="2" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text> Reads B&lt;File&gt;:&lt;Element&gt; as a number, for SLC logic that used a whole word of a bit file (MOV B3:16 N7:0,
+ EQU B3:5 0, ...). The 16 bits are named members of the DB, laid out so the word reads exactly as in the SLC.</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+      <SW.Blocks.CompileUnit ID="3" CompositionName="CompileUnits">
+        <AttributeList>
+          <NetworkSource><StructuredText xmlns="http://www.siemens.com/automation/Openness/SW/NetworkSource/StructuredText/v4">
+  <LineComment Inserted="false" NoClosingBracket="false" UId="21">
+    <Text UId="22"> 16#84 is the DB memory area; each word is 2 bytes.</Text>
+  </LineComment>
+  <NewLine Num="1" UId="23" />
+  <Access Scope="LocalVariable" UId="24">
+    <Symbol UId="25">
+      <Component Name="SLC_WORD_READ" UId="26" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="27" />
+  <Token Text=":=" UId="28" />
+  <Blank Num="1" UId="29" />
+  <Access Scope="Call" UId="30">
+    <Instruction Name="WORD_TO_INT" UId="31">
+      <Token Text="(" UId="32" />
+      <NamelessParameter UId="33">
+        <Access Scope="Call" UId="34">
+          <Instruction Name="PEEK" UId="35">
+            <TemplateValue Name="value_type" Type="Type" UId="36">Word</TemplateValue>
+            <Token Text="(" UId="37" />
+            <Parameter Name="area" UId="38">
+              <Blank Num="1" UId="39" />
+              <Token Text=":=" UId="40" />
+              <Blank Num="1" UId="41" />
+              <Access Scope="LiteralConstant" UId="42">
+                <Constant UId="43">
+                  <ConstantValue UId="45">16#84</ConstantValue>
+                </Constant>
+              </Access>
+            </Parameter>
+            <Token Text="," UId="46" />
+            <Blank Num="1" UId="47" />
+            <Parameter Name="dbNumber" UId="48">
+              <Blank Num="1" UId="49" />
+              <Token Text=":=" UId="50" />
+              <Blank Num="1" UId="51" />
+              <Access Scope="LocalVariable" UId="52">
+                <Symbol UId="53">
+                  <Component Name="File" UId="54" />
+                </Symbol>
+              </Access>
+            </Parameter>
+            <Token Text="," UId="55" />
+            <Blank Num="1" UId="56" />
+            <Parameter Name="byteOffset" UId="57">
+              <Blank Num="1" UId="58" />
+              <Token Text=":=" UId="59" />
+              <Blank Num="1" UId="60" />
+              <Access Scope="LocalVariable" UId="61">
+                <Symbol UId="62">
+                  <Component Name="Element" UId="63" />
+                </Symbol>
+              </Access>
+              <Blank Num="1" UId="64" />
+              <Token Text="*" UId="65" />
+              <Blank Num="1" UId="66" />
+              <Access Scope="LiteralConstant" UId="67">
+                <Constant UId="68">
+                  <ConstantValue UId="70">2</ConstantValue>
+                </Constant>
+              </Access>
+            </Parameter>
+            <Token Text=")" UId="72" />
+          </Instruction>
+        </Access>
+      </NamelessParameter>
+      <Token Text=")" UId="74" />
+    </Instruction>
+  </Access>
+  <Token Text=";" UId="75" />
+</StructuredText></NetworkSource>
+          <ProgrammingLanguage>SCL</ProgrammingLanguage>
+        </AttributeList>
+        <ObjectList>
+          <MultilingualText ID="4" CompositionName="Comment">
+            <ObjectList>
+              <MultilingualTextItem ID="5" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+          <MultilingualText ID="6" CompositionName="Title">
+            <ObjectList>
+              <MultilingualTextItem ID="7" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+        </ObjectList>
+      </SW.Blocks.CompileUnit>
+      <MultilingualText ID="8" CompositionName="Title">
+        <ObjectList>
+          <MultilingualTextItem ID="9" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text>Read a whole word of a bit file</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+    </ObjectList>
+  </SW.Blocks.FC>
+</Document>

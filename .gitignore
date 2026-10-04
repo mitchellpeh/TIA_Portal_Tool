@@ -1,0 +1,35 @@
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+.claude/
+/TiaPortalTool.exe
+
+# Built test runner (kept stable so the Openness firewall approval sticks)
+/tools/runner/
+
+# Test script output
+/tools/tests/out/
+
+# Never commit project or customer data: TIA projects/archives, PLC exports, symbol files, workbooks, documents
+*.ap[0-9][0-9]
+*.zap[0-9][0-9]
+*.als[0-9][0-9]
+*.SLC
+*.slc
+*.SY5
+*.SY6
+*.EAS
+*.RSS
+*.ACD
+*.L5X
+*.L5K
+*.apa
+*.mer
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.doc
+*.docx

@@ -1,0 +1,426 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Document>
+  <Engineering version="V20" />
+  <DocumentInfo>
+    <Created>2026-10-03T18:54:34.9372664Z</Created>
+    <ExportSetting>WithDefaults</ExportSetting>
+    <InstalledProducts>
+      <Product>
+        <DisplayName>Totally Integrated Automation Portal</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>TIA Portal Openness</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>TIA Portal Version Control Interface</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>SINAMICS Startdrive Advanced</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>SINAMICS Startdrive G110M, G120, G120C, G120D, G120P, G115D</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>SINAMICS Startdrive G130, G150, S120, S150, SINAMICS MV, G220, S200, S210</DisplayName>
+        <DisplayVersion>V20 SP1 Update 1</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>STEP 7 Professional</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>STEP 7 Safety</DisplayName>
+        <DisplayVersion>V20 Update 2</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>WinCC Basic/Comfort/Advanced</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+      <Product>
+        <DisplayName>WinCC Unified</DisplayName>
+        <DisplayVersion>V20 Update 4</DisplayVersion>
+      </Product>
+    </InstalledProducts>
+  </DocumentInfo>
+  <SW.Blocks.FC ID="0">
+    <AttributeList>
+      <AutoNumber>true</AutoNumber>
+      <HeaderAuthor />
+      <HeaderFamily />
+      <HeaderName />
+      <HeaderVersion>0.1</HeaderVersion>
+      <Interface><Sections xmlns="http://www.siemens.com/automation/Openness/SW/Interface/v5">
+  <Section Name="Input">
+    <Member Name="BaseMs" Datatype="DInt" Accessibility="Public">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Timebase of the timers using this setpoint, in milliseconds (1000 for 1.0 s)</MultiLanguageText>
+      </Comment>
+    </Member>
+  </Section>
+  <Section Name="Output" />
+  <Section Name="InOut">
+    <Member Name="SP" Datatype="&quot;UDT_TIME_SP&quot;" Accessibility="Public">
+      <Comment>
+        <MultiLanguageText Lang="en-US">The setpoint object</MultiLanguageText>
+      </Comment>
+      <Sections>
+        <Section Name="None">
+          <Member Name="Input_Hours" Datatype="Real" />
+          <Member Name="Input_Mins" Datatype="Real" />
+          <Member Name="Input_Secs" Datatype="Real" />
+          <Member Name="Output_Seconds" Datatype="Time" />
+        </Section>
+      </Sections>
+    </Member>
+  </Section>
+  <Section Name="Temp">
+    <Member Name="totalMs" Datatype="Real" />
+  </Section>
+  <Section Name="Constant" />
+  <Section Name="Return">
+    <Member Name="Ret_Val" Datatype="Int" Accessibility="Public" />
+  </Section>
+</Sections></Interface>
+      <IsIECCheckEnabled>false</IsIECCheckEnabled>
+      <MemoryLayout>Optimized</MemoryLayout>
+      <Name>SLC_TIME_SP</Name>
+      <Namespace />
+      <Number>26</Number>
+      <ProgrammingLanguage>SCL</ProgrammingLanguage>
+      <SetENOAutomatically>false</SetENOAutomatically>
+      <UDABlockProperties />
+      <UDAEnableTagReadback>false</UDAEnableTagReadback>
+    </AttributeList>
+    <ObjectList>
+      <MultilingualText ID="1" CompositionName="Comment">
+        <ObjectList>
+          <MultilingualTextItem ID="2" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text> Adds up an HMI timer setpoint entered as hours, minutes and/or seconds into Output_Seconds (TIME), which the
+ timers use as their preset. Returns the same value in counts of the SLC timebase so logic that still reads the
+ original SLC word keeps seeing the right number.</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+      <SW.Blocks.CompileUnit ID="3" CompositionName="CompileUnits">
+        <AttributeList>
+          <NetworkSource><StructuredText xmlns="http://www.siemens.com/automation/Openness/SW/NetworkSource/StructuredText/v4">
+  <LineComment Inserted="false" NoClosingBracket="false" UId="21">
+    <Text UId="22"> Any of the three can be left at 0, so the HMI can show only the fields that suit the process.</Text>
+  </LineComment>
+  <NewLine Num="1" UId="23" />
+  <Access Scope="LocalVariable" UId="24">
+    <Symbol UId="25">
+      <Component Name="totalMs" UId="26" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="27" />
+  <Token Text=":=" UId="28" />
+  <Blank Num="1" UId="29" />
+  <Token Text="(" UId="30" />
+  <Access Scope="LocalVariable" UId="31">
+    <Symbol UId="32">
+      <Component Name="SP" UId="33" />
+      <Token Text="." UId="34" />
+      <Component Name="Input_Hours" UId="35" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="36" />
+  <Token Text="*" UId="37" />
+  <Blank Num="1" UId="38" />
+  <Access Scope="LiteralConstant" UId="39">
+    <Constant UId="40">
+      <ConstantValue UId="42">3600.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Blank Num="1" UId="43" />
+  <Token Text="+" UId="44" />
+  <Blank Num="1" UId="45" />
+  <Access Scope="LocalVariable" UId="46">
+    <Symbol UId="47">
+      <Component Name="SP" UId="48" />
+      <Token Text="." UId="49" />
+      <Component Name="Input_Mins" UId="50" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="51" />
+  <Token Text="*" UId="52" />
+  <Blank Num="1" UId="53" />
+  <Access Scope="LiteralConstant" UId="54">
+    <Constant UId="55">
+      <ConstantValue UId="57">60.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Blank Num="1" UId="58" />
+  <Token Text="+" UId="59" />
+  <Blank Num="1" UId="60" />
+  <Access Scope="LocalVariable" UId="61">
+    <Symbol UId="62">
+      <Component Name="SP" UId="63" />
+      <Token Text="." UId="64" />
+      <Component Name="Input_Secs" UId="65" />
+    </Symbol>
+  </Access>
+  <Token Text=")" UId="66" />
+  <Blank Num="1" UId="67" />
+  <Token Text="*" UId="68" />
+  <Blank Num="1" UId="69" />
+  <Access Scope="LiteralConstant" UId="70">
+    <Constant UId="71">
+      <ConstantValue UId="73">1000.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="74" />
+  <NewLine Num="2" UId="75" />
+  <LineComment Inserted="false" NoClosingBracket="false" UId="76">
+    <Text UId="77"> Keep it inside the TIME range (0 to about 24.8 days).</Text>
+  </LineComment>
+  <NewLine Num="1" UId="78" />
+  <Token Text="IF" UId="79" />
+  <Blank Num="1" UId="80" />
+  <Access Scope="LocalVariable" UId="81">
+    <Symbol UId="82">
+      <Component Name="totalMs" UId="83" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="84" />
+  <Token Text="&lt;" UId="85" />
+  <Blank Num="1" UId="86" />
+  <Access Scope="LiteralConstant" UId="87">
+    <Constant UId="88">
+      <ConstantValue UId="90">0.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Blank Num="1" UId="91" />
+  <Token Text="THEN" UId="92" />
+  <NewLine Num="1" UId="93" />
+  <Blank Num="4" UId="94" />
+  <Access Scope="LocalVariable" UId="95">
+    <Symbol UId="96">
+      <Component Name="totalMs" UId="97" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="98" />
+  <Token Text=":=" UId="99" />
+  <Blank Num="1" UId="100" />
+  <Access Scope="LiteralConstant" UId="101">
+    <Constant UId="102">
+      <ConstantValue UId="104">0.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="105" />
+  <NewLine Num="1" UId="106" />
+  <Token Text="ELSIF" UId="107" />
+  <Blank Num="1" UId="108" />
+  <Access Scope="LocalVariable" UId="109">
+    <Symbol UId="110">
+      <Component Name="totalMs" UId="111" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="112" />
+  <Token Text="&gt;" UId="113" />
+  <Blank Num="1" UId="114" />
+  <Access Scope="LiteralConstant" UId="115">
+    <Constant UId="116">
+      <ConstantValue UId="118">2147483647.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Blank Num="1" UId="119" />
+  <Token Text="THEN" UId="120" />
+  <NewLine Num="1" UId="121" />
+  <Blank Num="4" UId="122" />
+  <Access Scope="LocalVariable" UId="123">
+    <Symbol UId="124">
+      <Component Name="totalMs" UId="125" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="126" />
+  <Token Text=":=" UId="127" />
+  <Blank Num="1" UId="128" />
+  <Access Scope="LiteralConstant" UId="129">
+    <Constant UId="130">
+      <ConstantValue UId="132">2147483647.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="133" />
+  <NewLine Num="1" UId="134" />
+  <Token Text="END_IF" UId="135" />
+  <Token Text=";" UId="136" />
+  <NewLine Num="2" UId="137" />
+  <Access Scope="LocalVariable" UId="138">
+    <Symbol UId="139">
+      <Component Name="SP" UId="140" />
+      <Token Text="." UId="141" />
+      <Component Name="Output_Seconds" UId="142" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="143" />
+  <Token Text=":=" UId="144" />
+  <Blank Num="1" UId="145" />
+  <Access Scope="Call" UId="146">
+    <Instruction Name="DINT_TO_TIME" UId="147">
+      <Token Text="(" UId="148" />
+      <NamelessParameter UId="149">
+        <Access Scope="Call" UId="150">
+          <Instruction Name="REAL_TO_DINT" UId="151">
+            <Token Text="(" UId="152" />
+            <NamelessParameter UId="153">
+              <Access Scope="LocalVariable" UId="154">
+                <Symbol UId="155">
+                  <Component Name="totalMs" UId="156" />
+                </Symbol>
+              </Access>
+            </NamelessParameter>
+            <Token Text=")" UId="158" />
+          </Instruction>
+        </Access>
+      </NamelessParameter>
+      <Token Text=")" UId="160" />
+    </Instruction>
+  </Access>
+  <Token Text=";" UId="161" />
+  <NewLine Num="2" UId="162" />
+  <LineComment Inserted="false" NoClosingBracket="false" UId="163">
+    <Text UId="164"> The same value in timebase counts, limited to the 16-bit range of the SLC word.</Text>
+  </LineComment>
+  <NewLine Num="1" UId="165" />
+  <Token Text="IF" UId="166" />
+  <Blank Num="1" UId="167" />
+  <Access Scope="LocalVariable" UId="168">
+    <Symbol UId="169">
+      <Component Name="totalMs" UId="170" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="171" />
+  <Token Text="/" UId="172" />
+  <Blank Num="1" UId="173" />
+  <Access Scope="Call" UId="174">
+    <Instruction Name="DINT_TO_REAL" UId="175">
+      <Token Text="(" UId="176" />
+      <NamelessParameter UId="177">
+        <Access Scope="LocalVariable" UId="178">
+          <Symbol UId="179">
+            <Component Name="BaseMs" UId="180" />
+          </Symbol>
+        </Access>
+      </NamelessParameter>
+      <Token Text=")" UId="182" />
+    </Instruction>
+  </Access>
+  <Blank Num="1" UId="183" />
+  <Token Text="&gt;" UId="184" />
+  <Blank Num="1" UId="185" />
+  <Access Scope="LiteralConstant" UId="186">
+    <Constant UId="187">
+      <ConstantValue UId="189">32767.0</ConstantValue>
+    </Constant>
+  </Access>
+  <Blank Num="1" UId="190" />
+  <Token Text="THEN" UId="191" />
+  <NewLine Num="1" UId="192" />
+  <Blank Num="4" UId="193" />
+  <Access Scope="LocalVariable" UId="194">
+    <Symbol UId="195">
+      <Component Name="SLC_TIME_SP" UId="196" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="197" />
+  <Token Text=":=" UId="198" />
+  <Blank Num="1" UId="199" />
+  <Access Scope="LiteralConstant" UId="200">
+    <Constant UId="201">
+      <ConstantValue UId="203">32767</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="204" />
+  <NewLine Num="1" UId="205" />
+  <Token Text="ELSE" UId="206" />
+  <NewLine Num="1" UId="207" />
+  <Blank Num="4" UId="208" />
+  <Access Scope="LocalVariable" UId="209">
+    <Symbol UId="210">
+      <Component Name="SLC_TIME_SP" UId="211" />
+    </Symbol>
+  </Access>
+  <Blank Num="1" UId="212" />
+  <Token Text=":=" UId="213" />
+  <Blank Num="1" UId="214" />
+  <Access Scope="Call" UId="215">
+    <Instruction Name="REAL_TO_INT" UId="216">
+      <Token Text="(" UId="217" />
+      <NamelessParameter UId="218">
+        <Access Scope="LocalVariable" UId="219">
+          <Symbol UId="220">
+            <Component Name="totalMs" UId="221" />
+          </Symbol>
+        </Access>
+        <Blank Num="1" UId="222" />
+        <Token Text="/" UId="223" />
+        <Blank Num="1" UId="224" />
+        <Access Scope="Call" UId="225">
+          <Instruction Name="DINT_TO_REAL" UId="226">
+            <Token Text="(" UId="227" />
+            <NamelessParameter UId="228">
+              <Access Scope="LocalVariable" UId="229">
+                <Symbol UId="230">
+                  <Component Name="BaseMs" UId="231" />
+                </Symbol>
+              </Access>
+            </NamelessParameter>
+            <Token Text=")" UId="233" />
+          </Instruction>
+        </Access>
+      </NamelessParameter>
+      <Token Text=")" UId="235" />
+    </Instruction>
+  </Access>
+  <Token Text=";" UId="236" />
+  <NewLine Num="1" UId="237" />
+  <Token Text="END_IF" UId="238" />
+  <Token Text=";" UId="239" />
+</StructuredText></NetworkSource>
+          <ProgrammingLanguage>SCL</ProgrammingLanguage>
+        </AttributeList>
+        <ObjectList>
+          <MultilingualText ID="4" CompositionName="Comment">
+            <ObjectList>
+              <MultilingualTextItem ID="5" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+          <MultilingualText ID="6" CompositionName="Title">
+            <ObjectList>
+              <MultilingualTextItem ID="7" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+        </ObjectList>
+      </SW.Blocks.CompileUnit>
+      <MultilingualText ID="8" CompositionName="Title">
+        <ObjectList>
+          <MultilingualTextItem ID="9" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text>Timer setpoint from hours, minutes and seconds</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+    </ObjectList>
+  </SW.Blocks.FC>
+</Document>

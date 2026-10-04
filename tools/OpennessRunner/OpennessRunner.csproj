@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Stable host for automated TIA Portal tests. TIA's Openness firewall approves an exe by its hash, so this
+       project is built once into tools/runner and left alone; it loads the latest TiaPortalTool.exe build and
+       runs TiaPortalTool.Testing.HeadlessCommands from it. Rebuilding it means approving it again. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>..\runner\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+</Project>

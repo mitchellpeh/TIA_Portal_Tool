@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Console runner for the SLC converter, for testing against sample exports without the GUI.
+       It compiles the converter sources straight from the app project. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\TiaPortalTool\Conversion\**\*.cs" Link="Conversion\%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\TiaPortalTool\Conversion\Slc\Helpers\*.xml" LogicalName="SlcHelper.%(Filename).xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.102.3" />
+  </ItemGroup>
+
+</Project>
