@@ -60,7 +60,7 @@ public sealed class TiaOperand
 
     /// <summary>
     /// A data file element reached by file and element number rather than by name: a whole word of a bit file
-    /// (B3:16), or an indirect address (N91:[N7:56], N[N43:61]:[N43:63], B3:70/[N7:200]). File, element and bit
+    /// (B3:16), or an indirect address (N50:[N7:6], N[N7:11]:[N7:12], B3:40/[N7:10]). File, element and bit
     /// are constants or variables. TIA's LAD import doesn't take addresses like these, so the translator reads and
     /// writes them through the SLC_WORD/FLOAT/BIT helpers. DataType is Word (B/N), Real (F) or Bool (a bit).
     /// </summary>

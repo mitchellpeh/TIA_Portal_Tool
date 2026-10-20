@@ -30,7 +30,7 @@ public sealed class SlcSymbolTable
 
     public IEnumerable<KeyValuePair<SlcAddress, SlcSymbol>> Entries => _byAddress;
 
-    /// <summary>Rows whose address couldn't be understood (e.g. indirect "N63:[N43:58]").</summary>
+    /// <summary>Rows whose address couldn't be understood (e.g. indirect "N60:[N7:13]").</summary>
     public List<string> SkippedAddresses { get; } = new();
 
     public SlcSymbol? Find(SlcAddress address) => _byAddress.TryGetValue(address, out var symbol) ? symbol : null;

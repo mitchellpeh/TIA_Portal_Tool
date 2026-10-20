@@ -48,7 +48,7 @@ public static class SlcConverter
 {
     // Folders this converter writes; they are cleared on each run so stale files never get imported.
     /// <summary>The converter's version, shown in the app and on every report's cover. Bump it when the output changes.</summary>
-    public const string ToolVersion = "0.2.2";
+    public const string ToolVersion = "0.2.3";
 
     public const string TypesFolder = "_types";
     public const string SourcesFolder = "_sources";

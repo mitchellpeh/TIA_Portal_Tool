@@ -3,7 +3,7 @@ obj/
 *.user
 .vs/
 .vscode/
-.claude/
+/.claude/
 /TiaPortalTool.exe
 
 # Built test runner (kept stable so the Openness firewall approval sticks)

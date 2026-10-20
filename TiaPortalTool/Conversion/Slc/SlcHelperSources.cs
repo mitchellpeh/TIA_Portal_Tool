@@ -197,9 +197,9 @@ TITLE = Read a float by file and element number
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
 // Reads F<File>:<Element> where the element (or file) number comes from another word, as in the SLC indirect
-// address F90:[N7:55].
+// address F20:[N7:5].
    VAR_INPUT 
-      File : DInt;   // Float file number (90 for F90)
+      File : DInt;   // Float file number (20 for F20)
       Element : DInt;   // Element number
    END_VAR
 
@@ -213,9 +213,9 @@ TITLE = Write a float by file and element number
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
 // Writes F<File>:<Element> where the element (or file) number comes from another word, as in the SLC indirect
-// address F90:[N7:55].
+// address F20:[N7:5].
    VAR_INPUT 
-      File : DInt;   // Float file number (90 for F90)
+      File : DInt;   // Float file number (20 for F20)
       Element : DInt;   // Element number
       Value : Real;   // New value
    END_VAR
@@ -230,7 +230,7 @@ TITLE = Read a bit by file, element and bit number
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
 // Reads B<File>:<Element>/<Bit> (or a bit of an N word) where a number comes from another word, as in the SLC
-// indirect address B3:70/[N7:200]. Bit numbers above 15 carry on into the following words, as in the SLC.
+// indirect address B3:40/[N7:10]. Bit numbers above 15 carry on into the following words, as in the SLC.
    VAR_INPUT 
       File : DInt;   // Data file number (3 for B3)
       Element : DInt;   // Word number
@@ -248,7 +248,7 @@ FUNCTION "SLC_BIT_SET" : Void
 TITLE = Set (latch) a bit by file, element and bit number
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-// Replaces OTL on an indirect bit address such as B3:70/[N7:200].
+// Replaces OTL on an indirect bit address such as B3:40/[N7:10].
    VAR_INPUT 
       File : DInt;   // Data file number (3 for B3)
       Element : DInt;   // Word number
@@ -266,7 +266,7 @@ FUNCTION "SLC_BIT_RESET" : Void
 TITLE = Reset (unlatch) a bit by file, element and bit number
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-// Replaces OTU on an indirect bit address such as B3:70/[N7:200].
+// Replaces OTU on an indirect bit address such as B3:40/[N7:10].
    VAR_INPUT 
       File : DInt;   // Data file number (3 for B3)
       Element : DInt;   // Word number

@@ -58,7 +58,7 @@
   <Section Name="Input">
     <Member Name="File" Datatype="DInt" Accessibility="Public">
       <Comment>
-        <MultiLanguageText Lang="en-US">Float file number (90 for F90)</MultiLanguageText>
+        <MultiLanguageText Lang="en-US">Float file number (20 for F20)</MultiLanguageText>
       </Comment>
     </Member>
     <Member Name="Element" Datatype="DInt" Accessibility="Public">
@@ -92,7 +92,7 @@
             <AttributeList>
               <Culture>en-US</Culture>
               <Text> Reads F&lt;File&gt;:&lt;Element&gt; where the element (or file) number comes from another word, as in the SLC indirect
- address F90:[N7:55].</Text>
+ address F20:[N7:5].</Text>
             </AttributeList>
           </MultilingualTextItem>
         </ObjectList>

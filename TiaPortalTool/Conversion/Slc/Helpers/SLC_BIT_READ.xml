@@ -97,7 +97,7 @@
             <AttributeList>
               <Culture>en-US</Culture>
               <Text> Reads B&lt;File&gt;:&lt;Element&gt;/&lt;Bit&gt; (or a bit of an N word) where a number comes from another word, as in the SLC
- indirect address B3:70/[N7:200]. Bit numbers above 15 carry on into the following words, as in the SLC.</Text>
+ indirect address B3:40/[N7:10]. Bit numbers above 15 carry on into the following words, as in the SLC.</Text>
             </AttributeList>
           </MultilingualTextItem>
         </ObjectList>

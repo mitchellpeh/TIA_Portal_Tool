@@ -1131,7 +1131,7 @@ public sealed class SlcLadderTranslator
     /// <summary>
     /// COP #source #destination length: SLC_COP_WORD / SLC_COP_FLOAT with the same file, element and length as the
     /// SLC instruction (the DBs are numbered like the files and keep the SLC layout). Indirect files or elements
-    /// (#N[N43:61]:[N43:63]) pass the pointer words.
+    /// (#N[N7:11]:[N7:12]) pass the pointer words.
     /// </summary>
     private void Cop(IReadOnlyList<string> ops, Power power)
     {

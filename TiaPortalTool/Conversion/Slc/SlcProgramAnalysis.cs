@@ -85,7 +85,7 @@ public sealed class SlcProgramAnalysis
     /// <summary>Words and bits the logic reads (operands it doesn't write), including COP source ranges.</summary>
     public HashSet<SlcAddress> ReadAddresses { get; } = new();
 
-    /// <summary>Data files read or written through indirect addresses ("N91"), or "N*" when the file number itself is indirect.</summary>
+    /// <summary>Data files read or written through indirect addresses ("N50"), or "N*" when the file number itself is indirect.</summary>
     public HashSet<string> IndirectFiles { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Words filled from a module's M0/M1/G or I/O data (COP/MOV), with the slot and the source address.</summary>
@@ -333,8 +333,8 @@ public sealed class SlcProgramAnalysis
 
     /// <summary>
     /// The words an operator enters for <paramref name="word"/>: the word itself if nothing in the program writes
-    /// it, or, if every write is a plain MOV from such entry words (a "staged" setpoint, e.g. LIM 0 N101:25 999
-    /// MOV N101:25 N7:0), those words. Returns null if logic calculates the value.
+    /// it, or, if every write is a plain MOV from such entry words (a "staged" setpoint, e.g. LIM 0 N20:5 999
+    /// MOV N20:5 N7:0), those words. Returns null if logic calculates the value.
     /// </summary>
     private List<SlcAddress>? FindEntryWords(SlcAddress word, int depth = 0)
     {

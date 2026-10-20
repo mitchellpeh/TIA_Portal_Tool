@@ -183,7 +183,7 @@ public sealed class SlcOperandResolver
 
     private static TiaOperand DInt(int value) => TiaOperand.Literal("DInt", value.ToString(CultureInfo.InvariantCulture));
 
-    // N91:[N7:56]   N[N43:61]:[N43:63]   F90:[N7:55]   B3:70/[N7:200]   N7:[N7:1]/3
+    // N50:[N7:6]   N[N7:11]:[N7:12]   F20:[N7:5]   B3:40/[N7:10]   N7:[N7:1]/3
     private static readonly System.Text.RegularExpressions.Regex IndirectForm = new(
         @"^(?<type>[A-Z])(?:(?<file>\d+)|\[(?<fileIx>[^\]]+)\]):(?:(?<elem>\d+)|\[(?<elemIx>[^\]]+)\])(?:/(?:(?<bit>\d+)|\[(?<bitIx>[^\]]+)\]))?$",
         System.Text.RegularExpressions.RegexOptions.Compiled);

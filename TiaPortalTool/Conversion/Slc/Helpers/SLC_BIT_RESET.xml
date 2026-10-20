@@ -96,7 +96,7 @@
           <MultilingualTextItem ID="2" CompositionName="Items">
             <AttributeList>
               <Culture>en-US</Culture>
-              <Text> Replaces OTU on an indirect bit address such as B3:70/[N7:200].</Text>
+              <Text> Replaces OTU on an indirect bit address such as B3:40/[N7:10].</Text>
             </AttributeList>
           </MultilingualTextItem>
         </ObjectList>

@@ -531,7 +531,7 @@ public sealed class SlcVerifier
         private string Name(XElement part) =>
             part.Name.LocalName == "Call" ? (string)part.Element(Flg + "CallInfo")!.Attribute("Name")! : (string)part.Attribute("Name")!;
 
-        /// <summary>The SLC address a helper's File/Element/Bit inputs stand for, e.g. N91:[N7:56] or B3:70/[N7:200].</summary>
+        /// <summary>The SLC address a helper's File/Element/Bit inputs stand for, e.g. N50:[N7:6] or B3:40/[N7:10].</summary>
         private string Addressed(string uid, string letterForIndirectFile) =>
             _owner.AddressText(In(uid, "File")!, In(uid, "Element")!, In(uid, "Bit"), letterForIndirectFile);
 
@@ -886,7 +886,7 @@ public sealed class SlcVerifier
 
     /// <summary>
     /// SLC address text from file, element and bit arguments that are numbers or pointer words:
-    /// (3, 16) -> B3:16, (91, N7:56) -> N91:[N7:56], (N43:61, N43:63) -> N[N43:61]:[N43:63].
+    /// (3, 16) -> B3:16, (50, N7:6) -> N50:[N7:6], (N7:11, N7:12) -> N[N7:11]:[N7:12].
     /// </summary>
     private string AddressText(string file, string element, string? bit, string letterForIndirectFile)
     {
