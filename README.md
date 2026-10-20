@@ -13,6 +13,19 @@ This repository holds only the tool's source, tests and docs. No customer or
 project data (TIA projects, PLC exports, workbooks, HMI exports) is kept here,
 and `.gitignore` blocks those file types.
 
+## Which branch to use
+
+**Use the `public` branch.** It is the released, project-agnostic version, and the only branch on GitHub.
+Sessions working on a TIA project, and anyone copying `project-kit/`, should read and run the tool from
+`public` (or the matching exe from the GitHub Releases page). Other branches in a local clone are tool
+development work in progress: they may hold unreleased features or older copies of the docs.
+
+To get a clean copy of the release next to a development checkout:
+
+```powershell
+git -C <TIA_Portal_Tool> worktree add <folder> public
+```
+
 ## Import / Export
 
 - **Export**: opens a TIA Portal project headless and writes Excel workbooks:

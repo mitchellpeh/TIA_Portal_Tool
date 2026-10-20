@@ -21,6 +21,10 @@ facts go in the new project's own files, never back into this folder.
 
 ## How to use it
 
+0. Take the kit from the tool's **`public` branch** (the released version). A local clone may have another
+   branch checked out that has an older copy of this folder, or none at all. To check:
+   `git -C <TIA_Portal_Tool> branch --show-current`. To copy the kit straight from `public`:
+   `git -C <TIA_Portal_Tool> archive public project-kit | tar -x -C <dest>`.
 1. Copy the **contents** of this folder into the root of the new project workspace, so that `CLAUDE.md` and
    `.claude\` sit at the workspace root. Then copy `docs\templates\*.md` into `docs\`.
    ```powershell

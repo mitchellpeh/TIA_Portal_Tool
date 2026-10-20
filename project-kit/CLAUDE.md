@@ -130,6 +130,8 @@ A user correction of a source ("V21 is the truth, not V20") goes into the regist
   badly, so read those pages as images.
 - Python 3 (`python`, with pymupdf and openpyxl) and PowerShell/.NET for parsing. There is no Excel: xlsx opens in
   OpenOffice Calc, so generated workbooks must look right there.
+- **Use the TIA Portal Tool's `public` branch** (the release) for docs, the kit and the tool itself. Other
+  branches in the tool folder are tool development work, not for project sessions.
 - **TIA Portal Tool** headless commands always run through the Openness-approved runner:
   `<tool>\tools\runner\OpennessRunner.exe <tool>\TiaPortalTool.exe <command> ...`. Running
   `TiaPortalTool.exe` with arguments directly only opens the GUI. Useful commands (depending on the
