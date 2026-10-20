@@ -142,6 +142,59 @@ A user correction of a source ("V21 is the truth, not V20") goes into the regist
 - A headless TIA instance can run on a copy while the user has the live project open in their own TIA.
   Watch the RAM: two instances plus a large project can run out of memory.
 
+### Building an import package for the tool
+A package is the `import\` (and `import_hmi\`) folder of a deliverable: what the user picks in **Import
+Folder** / **Import HMI**. A good one imports, compiles and saves in one run, with no hand steps in TIA.
+What the tool reads depends on its version, so check the README of the version you run (`public`).
+- **What Import Folder reads:**
+  - `<Table>.tags.tsv`: tab-separated `Name`, `DataType`, `Address`, optional `en-US` comment; `#` lines
+    are comments.
+  - `<group>\<subgroup>\*.xml`: SimaticML blocks. Subfolders are block groups, created as needed. A file
+    holds one block, and its `<Name>` is the block name.
+  - `SW.Types.*` XML (PLC data types) in any subfolder. They go to the top level of PLC data types.
+  - `*.scl` sources (newer versions). The blocks they generate land in the **top-level** group. To ship an
+    SCL block in a group, generate it in a build copy, export its SimaticML, and ship that XML instead.
+  - Newer versions also read an `HMI\<device>` export (with its `hmi_manifest.json`) and
+    `*.projecttexts.xlsx`.
+- **Import order:** data types, then global DBs, then SCL sources, then tags, then the other blocks
+  (alphabetical inside a folder). Each step can use the ones before it, so a package can carry a type, the
+  DB that uses it and the FB that reads the DB.
+- **Start from an export of the target project, never from memory.** Put it in `base_blocks_xml\` with its
+  date and source in the README. Edit copies with `build.py` and keep the SimaticML structure TIA wrote.
+  Hand-written XML from scratch is the most common cause of import failures.
+- **One package = one consistent change.** Ship together:
+  - every block that changes, and every block that calls a changed interface;
+  - an FB with its instance DBs;
+  - for a replacement, the old call taken out (one writer per drive, valve or output).
+
+  Don't ship blocks that didn't change: each import overrides the block, and a TIA edit made since your
+  export would be lost.
+- **Keep numbers and names stable:** set `<AutoNumber>false` where the number matters (instance DB = drive
+  number). Keep file name = block name. Group folders match the TIA group names (the tool tolerates the
+  trailing dot Windows drops).
+- **Match the target project:**
+  - CPU family: an S7-1500 DB going into an S7-1200 needs `<DBAccessibleFromWebserver>` removed.
+  - Languages: remove texts in cultures the project doesn't have, or add the language first.
+  - Library versions: check `Version=` of library FBs (e.g. SinaSpeed) against the target.
+- **Nothing else in `import\`:** no README, script, notes or test output. The tool writes its run log into
+  the folder it imports (`logs\` in older versions, `TIA_Portal_Tool_Logs\` in newer ones, which imports
+  skip). Clear it before handing the package over.
+- **Compile rule:** the tool saves only when everything imported. In older versions the whole PLC program
+  must also compile clean. Newer versions ask whether to save with errors, or save anyway when "Save even
+  if the compile has errors" is ticked. If the target project already has compile errors, say so in the
+  package README: list them, and say whether the package fixes them.
+- **Test before handing over:** import into a copy of the project (`import-folder --no-save` headless,
+  where the version has it, or the GUI on a copy). Expect 0 errors, and explain any warning.
+  - When an import fails, read the **first** error only. Every later error is usually a block that depends
+    on the one that failed.
+  - After a test import of an HMI package, rebuild the package or restore its `hmi_manifest.json`
+    (see Deliverables above).
+- **The package README says exactly what to click and what to expect:**
+  - which button, and which folder to pick;
+  - the expected result line, and the compile errors and warnings to expect;
+  - what's still manual;
+  - rollback: archive the project first, or reimport `orig\`.
+
 ### Reporting a tool problem (bug, missing feature, lesson for the kit)
 The TIA Portal Tool is developed in its own session. A project session **never edits the tool, its repo or
 the kit**, not even to fix a one-line bug. It writes a report, and the user hands that report to the tool
