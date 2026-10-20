@@ -142,6 +142,33 @@ A user correction of a source ("V21 is the truth, not V20") goes into the regist
 - A headless TIA instance can run on a copy while the user has the live project open in their own TIA.
   Watch the RAM: two instances plus a large project can run out of memory.
 
+### Reporting a tool problem (bug, missing feature, lesson for the kit)
+The TIA Portal Tool is developed in its own session. A project session **never edits the tool, its repo or
+the kit**, not even to fix a one-line bug. It writes a report, and the user hands that report to the tool
+session.
+- **One folder per report: `deliverables\YYYY-MM-DD_TOOL_<TOPIC>\README.md`** (e.g.
+  `2026-01-15_TOOL_SAVE_EXISTING_ERRORS`). Use `YYYY-MM-DD_LESSONS_<TOPIC>` for lessons meant for the kit.
+  Fixtures go beside the README only if they're generic (see below).
+- **README layout** (in this order):
+  1. **Status:** dated lines: written, which tool version/branch and commit the code references were checked
+     against (`public` vX.Y.Z), and later "implemented in vX.Y.Z" / "declined".
+  2. **For the tool developer, read first:** the repo rules (no job data in the tool), the version bump you'd
+     expect (Import/Export x.Y.0 = new feature, x.y.Z = fix), and "test on a test project, never a job project".
+  3. **Problem:** what goes wrong and why it matters, in generic words. One observed case with numbers
+     ("3 errors in 2 blocks refused an unrelated import"), without job names, tags or paths.
+  4. **Current behaviour (code):** file, method and approximate line numbers you checked.
+  5. **Proposed behaviour:** numbered, including defaults, GUI wording, headless flags and messages.
+  6. **Design notes:** API shape, edge cases, what must stay unchanged.
+  7. **Acceptance tests:** a table (# / setup / option / expected) a test project can reproduce.
+  8. **Out of scope / related ideas:** separate items, one line each.
+- **Everything from "Problem" down must be project-agnostic** so it can be pasted into the tool repo as is:
+  no job number, customer, machine, tag, address or path. Job-specific notes (where it happened, which
+  package is waiting for the fix) go in a separate section at the end, marked "stays with this job".
+- **One problem per report.** A lessons report can list many lessons, each marked *seen once* when it was
+  observed on one job only.
+- Until the fix is released, work around it in your own deliverable and say so in its README, with a link
+  to the TOOL report.
+
 ## Agents (`.claude/agents/`)
 | Agent | Use for |
 |---|---|
