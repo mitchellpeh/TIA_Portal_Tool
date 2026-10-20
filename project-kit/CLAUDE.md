@@ -66,10 +66,31 @@ A user correction of a source ("V21 is the truth, not V20") goes into the regist
   compare directions all count. Allowed differences are the ones the user approves: hardware,
   non-portable constructs, the setpoint object pattern.
 
-### Deliverables
-- One folder per piece of work: `deliverables\YYYY-MM-DD_TOPIC\`, holding a `README.md` (what, why, how to
-  apply, what's still manual, rollback), the generator script (`build.py`) and its output (`import\`).
-  Build outputs from a named base export, and regenerate from a fresh export rather than hand-patching.
+### Deliverables (the deliverables folder is the only place work lands)
+- **Everything you produce goes in `deliverables\`.** Scratch work goes in the session scratchpad. Never write
+  into the TIA project, its export folders, the original program backup or the TIA Portal Tool repo.
+- **One folder per piece of work: `deliverables\YYYY-MM-DD_TOPIC\`** (date = when it was started, TOPIC in
+  caps, e.g. `2026-01-15_ALARM_ACK`). Typical layout:
+
+  | Path | What |
+  |---|---|
+  | `README.md` | What, why, how to apply (step by step), what's still manual, rollback, and the status block |
+  | `build.py` | Regenerates everything below from the base. Rerun it rather than hand-patching outputs |
+  | `base_blocks_xml\`, `base_hmi\` | The export the build started from (name its date/source in the README) |
+  | `work_*\` | Edited copies the build produces |
+  | `orig\` | Unedited sources, when a file is modified, for diff and rollback |
+  | `import\`, `import_hmi\` | Exactly what the user runs (Import Folder / Import HMI), nothing else in them |
+  | `data\*.csv`, `changelog.tsv` | Evidence and the per-edit change list |
+  | `logs\` | Test-import and compile logs from the copy |
+- **README status block** at the top, one dated line per event: built (from which base), tested on which
+  copy (PLC/HMI errors and warnings), applied by the user (or not), superseded by what.
+- **Revisions don't overwrite:** a changed approach becomes `build_v2.py` / `import_v2\` beside the original,
+  with the README saying which one is current. Follow-up work after a package was applied gets a **new dated
+  folder** that links back to the earlier one.
+- **Exception:** a living plan or tracking document the user asks to keep current is updated in place (with a
+  status table at its top), not copied into new dated folders.
+- **Memory and hand-offs point at the deliverable path** instead of repeating its contents. Before re-deriving
+  anything, check `deliverables\` for earlier work on the same topic.
 - State the status of every deliverable plainly: built / tested on a copy / compiled / applied by the user.
 - **Test every import package on a project copy before handing it over** (headless `import-folder
   --no-save`, or a real import on a copy). Read the whole generated SCL before handing it over.

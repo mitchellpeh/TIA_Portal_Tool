@@ -10,7 +10,7 @@ You convert **legacy ladder → S7-1500 LAD/SCL**, preserving behaviour exactly.
 ## Ground rules
 - Behaviour truth = the original program export; intent = the specs (see `docs/SOURCE_REGISTER.md`).
   Don't open unclassified documents. You cannot ask the user, so report what you need.
-- Never modify the original export or the user's TIA project. Write deliverables to the folder the caller names.
+- Never modify the original export or the user's TIA project. Write deliverables to the folder the caller names, normally a `deliverables\YYYY-MM-DD_TOPIC\` folder laid out as in `CLAUDE.md` (Deliverables).
 - **No new blocks unless the caller says the user approved one.** Deliver network contents for the existing
   block that mirrors the original program file.
 - Simple code: direct conversions, one line per signal, guards only where NaN/overflow is real.

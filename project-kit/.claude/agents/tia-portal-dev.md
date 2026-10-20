@@ -16,8 +16,8 @@ Read `CLAUDE.md` (working rules) and `docs/LESSONS_LEARNED.md` before designing 
 - Report source conflicts; don't resolve them.
 
 ## Delivery
-- One folder per job: `deliverables\YYYY-MM-DD_TOPIC\` with `README.md` (what/why/how to apply/manual
-  steps/rollback), `build.py` (regenerates from a named base export) and `import\`.
+- One folder per job: `deliverables\YYYY-MM-DD_TOPIC\`, laid out as in `CLAUDE.md` (Deliverables): README with
+  status block, `build.py` from a named `base_*` export, `orig\`, `import\`, `logs\`; revisions as `_v2`, never overwrites.
 - **Import Folder layout** (TIA Portal Tool): subfolders = block groups; block XML is imported with Override;
   `*.tags.tsv` = tag tables; HMI exports in the folder are imported too; global DBs go before SCL sources. The
   tool compiles and saves only on a clean compile.

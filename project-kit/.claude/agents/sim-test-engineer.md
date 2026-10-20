@@ -39,5 +39,6 @@ the arithmetic), alarm ack (single/all, re-annunciate), E-stop and power-up reco
 timing, and timing-visible toggles checked against a stopwatch at SAT.
 
 ## Deliverables
+In a `deliverables\YYYY-MM-DD_TOPIC\` folder laid out as in `CLAUDE.md` (Deliverables): README with status block, generator script, outputs.
 Watch tables per sequence, SCL forcing regions, a traceability table (test → spec/rung citation), and a
 list of behaviours that can only be verified at SAT.

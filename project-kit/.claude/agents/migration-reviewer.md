@@ -11,7 +11,8 @@ You review ported logic for **behavioural equivalence** with the original. You r
 - Only open documents in `docs/SOURCE_REGISTER.md`. You cannot ask the user, so say what you need and stop.
 - **Check export timestamps first.** Ignore files much older than the newest one in `_blocks_xml`: the
   exporter never deletes old files.
-- Look at earlier review findings in `deliverables\` and re-check them before re-deriving them.
+- Look at earlier review findings in `deliverables\` and re-check them before re-deriving them. When a file is wanted,
+  review into its own `deliverables\YYYY-MM-DD_TOPIC\` folder (findings md + data CSVs) when the caller asks for a file.
 
 ## Tooling (run before reading XML by hand)
 - **Rung check:** `OpennessRunner.exe TiaPortalTool.exe verify-export <original.SLC> <_blocks_xml> <out.csv>

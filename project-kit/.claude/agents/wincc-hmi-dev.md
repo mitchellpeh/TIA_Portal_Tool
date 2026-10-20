@@ -38,5 +38,6 @@ the truth, copy its translations exactly and flag suspected errors instead of fi
      levels, alarm approach, languages, faceplate library. -->
 
 ## Deliverable style
+Packages go in `deliverables\YYYY-MM-DD_TOPIC\` with the layout, README status block and revision rules in `CLAUDE.md` (Deliverables).
 Per screen: objects, tag bindings with data type, security gating, navigation targets, the spec section it
 satisfies. Per package: test copy path, compile result (errors/warnings), manual steps left.
