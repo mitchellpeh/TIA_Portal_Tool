@@ -280,7 +280,7 @@ etc. behave the same there. Don't move it back to modern .NET.
 ## HMI import / export
 
 **Scope:** HMI support in the Import / Export tool: exporting (done, 1.1.0) and
-importing (next) HMI **screens, tags and connections** through Openness. The
+importing (1.2.0) HMI **screens, tags and connections** through Openness. The
 HMI code sits behind `IHmiExporter` so other HMI types and combinations
 (Comfort/Basic panels, Unified panels, Unified PC RT, several HMIs on one PLC)
 can be added without a rewrite.
@@ -332,6 +332,38 @@ with 0 warnings in about a minute. Gotchas found on the way:
   or imported through Openness ("The programming language 'ProDiag' is not
   supported during import and export"). TIA generates them from the
   supervisions, so the export lists them as an expected skip, not a warning.
+**Import (Import / Export 1.2.0, `ClassicHmiImporter`, `HmiImportService`).**
+Every classic collection has `Import(FileInfo, ImportOptions)` (screens,
+templates, pop-ups, slide-ins, tag tables, tags, scripts, connections, cycles,
+text and graphic lists); global elements and the screen overview are single
+objects imported with `HmiTarget.ImportScreenGlobalElements` /
+`ImportScreenOverview`. Folders are made with `<folder>.Folders.Create(name)`.
+`ImportOptions` is None / Override / SkipInactiveCultures /
+ActivateInactiveCultures. How the import decides what to do:
+- The export writes a hash of each file into `hmi_manifest.json`. The hash is
+  over the XML content without `<DocumentInfo>` (export time and installed
+  products change on every export), so editor reformatting doesn't count.
+  Hash version 2 (`HashVersion` in the manifest; missing = 1) also drops the
+  `ID` attributes and, on objects with a `ControllerTag` link, `Length` and
+  `Coding`: TIA derives those from the PLC data type, so a PLC type
+  re-import changes them in TIA without anyone editing the HMI. Every hash
+  in one import uses the manifest's version.
+- File hash = manifest hash: unchanged, TIA isn't asked. Otherwise the object
+  in TIA is exported to a temp file and hashed: equal to the file = unchanged;
+  different from the manifest hash = changed in TIA too = conflict: forced =
+  import; otherwise `HmiImportOptions.ResolveConflict` decides (the GUI asks,
+  showing `HmiXmlDiff` of the file vs TIA's export); no resolver = keep TIA's
+  version and list the differences. Else imported with Override.
+- Openness calls block with no progress, and an RT Advanced HMI compile can
+  take 10+ minutes. `ProgressHeartbeat` reports once a minute with the CPU
+  TIA used; the HMI compiler runs as a child `Siemens.Automation.Portal`
+  process (`-Name=HMICompiler`), so summing all processes of that name
+  covers it.
+- After an import, the object is exported again and that hash goes into the
+  manifest (written only once the project is saved), in case TIA writes the
+  object back differently from the file.
+- HmiTarget is `ICompilable` like PlcSoftware, so `PlcCompiler.CompileAll`
+  compiles it too.
 - Run headless commands through `tools/runner/OpennessRunner.exe <TiaPortalTool.exe> ...`.
   Starting TiaPortalTool.exe with arguments doesn't run them.
 

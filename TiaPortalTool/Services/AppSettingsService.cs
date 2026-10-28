@@ -20,6 +20,12 @@ public sealed class AppSettings
     public bool CompileBeforeExport { get; set; }
     public bool ExportHmi { get; set; }
 
+    /// <summary>Open the project in the TIA Portal GUI after a successful Reimport / Import Folder / Import HMI.</summary>
+    public bool OpenProjectAfterImport { get; set; }
+
+    /// <summary>Save after Reimport / Import Folder / Import HMI even if the compile has errors, without asking.</summary>
+    public bool SaveWithCompileErrors { get; set; }
+
     /// <summary>Settings window: the Windows 95 style instead of the modern one.</summary>
     public bool Win95Style { get; set; }
 }

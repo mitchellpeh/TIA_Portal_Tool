@@ -116,6 +116,9 @@ A user correction of a source ("V21 is the truth, not V20") goes into the regist
 - **Check export timestamps first.** The exporter never deletes old files, so a renamed or deleted block's
   XML stays behind. Ignore files much older than the newest one in the folder.
 - Reimport/Override imports the *exported* XML, so any edit made in TIA after the export is reverted.
+- Don't put an OB that already exists in the project into `import\`: from v0.5.0 Import Folder refuses it
+  (replacing an OB loses its process image / event links and networks added since the export). Ship the
+  new networks as their own FC called from the OB, or as by-hand steps.
   Export immediately before building a package.
 
 ### Communication
@@ -177,8 +180,8 @@ What the tool reads depends on its version, so check the README of the version y
   - Languages: remove texts in cultures the project doesn't have, or add the language first.
   - Library versions: check `Version=` of library FBs (e.g. SinaSpeed) against the target.
 - **Nothing else in `import\`:** no README, script, notes or test output. The tool writes its run log into
-  the folder it imports (`logs\` in older versions, `TIA_Portal_Tool_Logs\` in newer ones, which imports
-  skip). Clear it before handing the package over.
+  the folder it imports (`TIA_Portal_Tool_Logs\`, which imports skip; v0.4.x and earlier wrote `logs\` into
+  the last export folder instead). Clear it before handing the package over.
 - **Compile rule:** the tool saves only when everything imported. In older versions the whole PLC program
   must also compile clean. Newer versions ask whether to save with errors, or save anyway when "Save even
   if the compile has errors" is ticked. If the target project already has compile errors, say so in the

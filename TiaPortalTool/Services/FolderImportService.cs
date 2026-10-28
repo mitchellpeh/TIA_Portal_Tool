@@ -7,6 +7,25 @@ namespace TiaPortalTool.Services;
 public sealed class FolderImportResult
 {
     public bool Success { get; set; }
+
+    /// <summary>The folder holds only HMI exports: nothing was imported into the PLC and nothing was compiled.</summary>
+    public bool NothingForPlc { get; set; }
+
+    /// <summary>
+    /// Everything imported and the only problem is the compile: the caller may still save if the user agrees
+    /// (<see cref="Compile"/> lists the errors).
+    /// </summary>
+    public bool OnlyCompileFailed => !Success && !ImportFailed && Compile is { Clean: false };
+
+    /// <summary>A file didn't import (nothing was compiled then).</summary>
+    public bool ImportFailed { get; set; }
+
+    /// <summary>The PLC compile after the import; null when it didn't run.</summary>
+    public CompileOutcome? Compile { get; set; }
+
+    /// <summary>Names of the blocks this import brought in (imported from XML or generated from SCL).</summary>
+    public IReadOnlyCollection<string> TouchedBlocks { get; set; } = Array.Empty<string>();
+
     public IReadOnlyList<string> Messages { get; set; } = Array.Empty<string>();
 }
 
@@ -15,10 +34,22 @@ public sealed class FolderImportResult
 ///   &lt;folder&gt;\&lt;Table name&gt;.tags.tsv   -> PLC tag table (created if missing). Columns: Name, DataType, Address[, Comment].
 ///   &lt;folder&gt;\&lt;group\path&gt;\*.xml     -> SimaticML block, imported with Override into that block group
 ///                                    (subfolders = block groups, same layout as the export's _blocks_xml).
-/// Tags go in first so imported blocks can bind to them by name.
+///                                    An OB that already exists in the project is refused, never replaced.
+/// Tags go in first so imported blocks can bind to them by name. HMI exports inside the folder (a folder with an
+/// hmi_manifest.json) are skipped here; the caller imports them with the HMI import.
 /// </summary>
 public sealed class FolderImportService
 {
+    /// <summary>
+    /// Where the tool writes its run logs: a folder inside the folder being imported (or exported to). Every import skips
+    /// it, so a log never gets imported and a package can be imported again as it is.
+    /// </summary>
+    public const string LogFolderName = "TIA_Portal_Tool_Logs";
+
+    /// <summary>True for a file inside a <see cref="LogFolderName"/> folder (at any depth).</summary>
+    public static bool InLogFolder(string path) =>
+        path.Split('\\', '/').Any(s => string.Equals(s, LogFolderName, StringComparison.OrdinalIgnoreCase));
+
     // TIA's auto-created names for absolute operands with no tag ("Tag_12", "Tag__639264727201275679").
     private static readonly Regex AutoTagName = new(@"^Tag_+\d+$", RegexOptions.Compiled);
 
@@ -29,14 +60,28 @@ public sealed class FolderImportService
         var messages = new List<string>();
         bool anyFailure = false;
 
-        var tagFiles = Directory.GetFiles(folder, "*.tags.tsv", SearchOption.AllDirectories).OrderBy(f => f).ToList();
-        var xmlFiles = Directory.GetFiles(folder, "*.xml", SearchOption.AllDirectories).OrderBy(f => f).ToList();
+        // HMI exports (HMI\<device> with an hmi_manifest.json) inside the folder are the HMI import's job, not blocks;
+        // the tool's own log folder is never imported.
+        var hmiFolders = Hmi.HmiImportService.FindHmiFolders(folder)
+            .Select(d => Path.GetFullPath(d).TrimEnd('\\') + "\\").ToList();
+        bool Skipped(string file) => InLogFolder(file) || hmiFolders.Any(d => Path.GetFullPath(file).StartsWith(d, StringComparison.OrdinalIgnoreCase));
+        var touched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var tagFiles = Directory.GetFiles(folder, "*.tags.tsv", SearchOption.AllDirectories).Where(f => !Skipped(f)).OrderBy(f => f).ToList();
+        var xmlFiles = Directory.GetFiles(folder, "*.xml", SearchOption.AllDirectories).Where(f => !Skipped(f)).OrderBy(f => f).ToList();
         var typeFiles = xmlFiles.Where(IsPlcTypeFile).ToList();
-        var blockFiles = xmlFiles.Except(typeFiles).ToList();
-        var sourceFiles = Directory.GetFiles(folder, "*.scl", SearchOption.AllDirectories).OrderBy(f => f).ToList();
+        // Global DBs go in before the SCL sources, since generated blocks may read them; other blocks come after.
+        var globalDbFiles = xmlFiles.Except(typeFiles).Where(IsGlobalDbFile).ToList();
+        var blockFiles = xmlFiles.Except(typeFiles).Except(globalDbFiles).ToList();
+        var sourceFiles = Directory.GetFiles(folder, "*.scl", SearchOption.AllDirectories).Where(f => !Skipped(f)).OrderBy(f => f).ToList();
         if (tagFiles.Count == 0 && xmlFiles.Count == 0 && sourceFiles.Count == 0)
         {
-            messages.Add($"Nothing to import in {folder} (expected *.tags.tsv, *.xml and/or *.scl).");
+            if (hmiFolders.Count > 0 || ProjectTextService.FindFiles(folder).Count > 0)
+            {
+                return new FolderImportResult { Success = true, NothingForPlc = true, Messages = messages };
+            }
+
+            messages.Add($"Nothing to import in {folder} (expected *.tags.tsv, *.xml, *.scl, {ProjectTextService.FilePattern} and/or an HMI export).");
             return new FolderImportResult { Success = false, Messages = messages };
         }
 
@@ -58,6 +103,23 @@ public sealed class FolderImportService
             }
         }
 
+        if (globalDbFiles.Count > 0)
+        {
+            var importOptionsType = assembly.GetType("Siemens.Engineering.ImportOptions")
+                ?? throw new InvalidOperationException("Siemens.Engineering.ImportOptions type not found.");
+            dynamic overrideOption = Enum.Parse(importOptionsType, "Override");
+            progress?.Report($"Importing {globalDbFiles.Count} global DB file(s)...");
+
+            foreach (var file in globalDbFiles)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!ImportBlockFile(plcSoftware, folder, file, overrideOption, messages, touched))
+                {
+                    anyFailure = true;
+                }
+            }
+        }
+
         // SCL sources next: they compile into blocks that imported blocks may call.
         if (sourceFiles.Count > 0)
         {
@@ -65,7 +127,7 @@ public sealed class FolderImportService
             foreach (var file in sourceFiles)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!ImportSourceFile(plcSoftware, file, messages))
+                if (!ImportSourceFile(plcSoftware, file, messages, touched))
                 {
                     anyFailure = true;
                 }
@@ -101,7 +163,7 @@ public sealed class FolderImportService
             foreach (var file in blockFiles)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!ImportBlockFile(plcSoftware, folder, file, overrideOption, messages))
+                if (!ImportBlockFile(plcSoftware, folder, file, overrideOption, messages, touched))
                 {
                     anyFailure = true;
                 }
@@ -109,16 +171,22 @@ public sealed class FolderImportService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        var importFailed = anyFailure;
+        CompileOutcome? compile = null;
         if (anyFailure)
         {
             messages.Add("Skipping compile because of the import failures above.");
         }
-        else if (!PlcCompiler.CompileAll(plcSoftware, assembly, messages, progress))
+        else
         {
-            anyFailure = true;
+            compile = PlcCompiler.Compile(plcSoftware, assembly, messages, progress);
+            anyFailure = !compile.Clean;
         }
 
-        return new FolderImportResult { Success = !anyFailure, Messages = messages };
+        return new FolderImportResult
+        {
+            Success = !anyFailure, ImportFailed = importFailed, Compile = compile, TouchedBlocks = touched, Messages = messages,
+        };
     }
 
     private static void ImportTagFile(dynamic plcSoftware, string file, List<string> messages)
@@ -216,15 +284,31 @@ public sealed class FolderImportService
         messages.Add($"Tag table '{tableName}': {created} created, {replaced} replaced, {autoRemoved} auto tag(s) removed, {skipped} skipped.");
     }
 
-    private static bool ImportBlockFile(dynamic plcSoftware, string root, string file, dynamic overrideOption, List<string> messages)
+    private static bool ImportBlockFile(dynamic plcSoftware, string root, string file, dynamic overrideOption, List<string> messages, HashSet<string> touched)
     {
         string relDir = Path.GetDirectoryName(file)!.Substring(root.TrimEnd('\\').Length).Trim('\\').Replace('\\', '/');
         string label = (relDir.Length > 0 ? relDir + "/" : string.Empty) + Path.GetFileName(file);
 
-        string? blockName = ReadBlockName(file);
+        string? blockName;
+        try
+        {
+            blockName = ReadBlockName(file);
+        }
+        catch (System.Xml.XmlException ex)
+        {
+            messages.Add($"Import failed for {label}: not valid XML ({ex.Message}).");
+            return false;
+        }
+
         if (blockName is null)
         {
             messages.Add($"Skipped {label}: no SW.Blocks.* <Name> found (not a block export?).");
+            return false;
+        }
+
+        if (IsObFile(file) && FindBlockAnywhere((object)plcSoftware.BlockGroup, blockName, string.Empty).Block is not null)
+        {
+            messages.Add($"Refused {label}: {ExistingObMessage(blockName)}");
             return false;
         }
 
@@ -234,13 +318,14 @@ public sealed class FolderImportService
 
             // Override only replaces a block in the target group; a same-named block in another group would collide.
             var existing = FindBlockAnywhere((object)plcSoftware.BlockGroup, blockName, string.Empty);
-            if (existing.Block is not null && !string.Equals(existing.Path, relDir, StringComparison.OrdinalIgnoreCase))
+            if (existing.Block is not null && !SameGroupPath(existing.Path, relDir))
             {
                 messages.Add($"  removed existing {blockName} from group '{existing.Path}' (moving it to '{relDir}').");
                 existing.Block.Delete();
             }
 
             group.Blocks.Import(new FileInfo(file), overrideOption);
+            touched.Add(blockName);
             messages.Add($"Imported {blockName} into '{(relDir.Length > 0 ? relDir : "Program blocks")}'.");
             return true;
         }
@@ -275,14 +360,27 @@ public sealed class FolderImportService
     /// Adds an SCL source as an external source and generates its blocks. Blocks the source defines are deleted
     /// first so the new versions replace them, wherever they are.
     /// </summary>
-    private static bool ImportSourceFile(dynamic plcSoftware, string file, List<string> messages)
+    private static bool ImportSourceFile(dynamic plcSoftware, string file, List<string> messages, HashSet<string> touched)
     {
         var name = Path.GetFileName(file);
         try
         {
             var text = File.ReadAllText(file);
-            var blockNames = Regex.Matches(text, "^\\s*(?:FUNCTION_BLOCK|FUNCTION|DATA_BLOCK|ORGANIZATION_BLOCK)\\s+\"([^\"]+)\"", RegexOptions.Multiline)
-                .Cast<Match>().Select(m => m.Groups[1].Value).ToList();
+            var declarations = Regex.Matches(text, "^\\s*(FUNCTION_BLOCK|FUNCTION|DATA_BLOCK|ORGANIZATION_BLOCK)\\s+\"([^\"]+)\"", RegexOptions.Multiline)
+                .Cast<Match>().ToList();
+            var blockNames = declarations.Select(m => m.Groups[2].Value).ToList();
+
+            // Checked before anything is deleted, so a refused source leaves the project as it was.
+            var existingObs = declarations
+                .Where(m => m.Groups[1].Value == "ORGANIZATION_BLOCK"
+                            && FindBlockAnywhere((object)plcSoftware.BlockGroup, m.Groups[2].Value, string.Empty).Block is not null)
+                .Select(m => m.Groups[2].Value).ToList();
+            if (existingObs.Count > 0)
+            {
+                messages.Add($"Refused {name}: {string.Join(" ", existingObs.Select(ExistingObMessage))}");
+                return false;
+            }
+
             foreach (var blockName in blockNames)
             {
                 var existing = FindBlockAnywhere((object)plcSoftware.BlockGroup, blockName, string.Empty);
@@ -301,6 +399,7 @@ public sealed class FolderImportService
 
             dynamic created = sources.CreateFromFile(name, file);
             created.GenerateBlocksFromSource();
+            touched.UnionWith(blockNames);
             messages.Add($"Generated {string.Join(", ", blockNames)} from {name}.");
             return true;
         }
@@ -310,6 +409,42 @@ public sealed class FolderImportService
             return false;
         }
     }
+
+    private static bool IsGlobalDbFile(string file)
+    {
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Load(file);
+            return doc.Root?.Elements().Any(e => e.Name.LocalName == "SW.Blocks.GlobalDB") == true;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsObFile(string file)
+    {
+        try
+        {
+            var doc = System.Xml.Linq.XDocument.Load(file);
+            return doc.Root?.Elements().Any(e => e.Name.LocalName == "SW.Blocks.OB") == true;
+        }
+        catch (System.Xml.XmlException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Why an existing OB is never replaced: the import deletes and recreates it, so the new OB loses what its XML doesn't
+    /// carry (process image partition and event links in the device configuration, cycle time, networks added in TIA
+    /// since the export). Seen in the field: a replaced Main stopped a high-speed counter.
+    /// </summary>
+    private static string ExistingObMessage(string obName) =>
+        $"OB '{obName}' already exists and is not replaced (a replaced OB loses its process image / event links in the "
+        + "device configuration and any networks added since the export). Add the network(s) to the OB in TIA by hand, "
+        + "or delete the OB in TIA first if a full replacement is really meant.";
 
     private static bool IsPlcTypeFile(string file)
     {
@@ -332,6 +467,16 @@ public sealed class FolderImportService
         return block?.Element("AttributeList")?.Element("Name")?.Value;
     }
 
+    /// <summary>
+    /// Group paths ("a/b") compared the way the export folders hold them: Windows drops trailing dots and spaces from
+    /// folder names, so a group "vi - MISC." is exported to (and imported from) a folder "vi - MISC".
+    /// </summary>
+    private static bool SameGroupPath(string a, string b)
+    {
+        static string Normalize(string path) => string.Join("/", path.Split('/').Select(s => s.TrimEnd('.', ' ')));
+        return string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static dynamic EnsureGroup(dynamic rootGroup, string groupPath, List<string> messages)
     {
         dynamic group = rootGroup;
@@ -345,7 +490,7 @@ public sealed class FolderImportService
             dynamic? next = null;
             foreach (dynamic candidate in group.Groups)
             {
-                if (string.Equals((string)candidate.Name, segment, StringComparison.OrdinalIgnoreCase))
+                if (SameGroupPath((string)candidate.Name, segment))
                 {
                     next = candidate;
                     break;

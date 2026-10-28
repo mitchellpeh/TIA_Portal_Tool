@@ -120,12 +120,14 @@ public sealed class WorkbookReimportService
             }
         }
 
+        var sheetFailed = anyFailure;
+        BlockReimportResult? blocks = null;
         if (blockManifestForCompile.Count > 0)
         {
             var blockReimportService = new BlockReimportService();
-            var result = blockReimportService.ReimportAndCompile(plcSoftware, assembly, blockManifestForCompile, progress, cancellationToken);
-            messages.AddRange(result.Messages);
-            if (!result.Success)
+            blocks = blockReimportService.ReimportAndCompile(plcSoftware, assembly, blockManifestForCompile, progress, cancellationToken);
+            messages.AddRange(blocks.Messages);
+            if (!blocks.Success)
             {
                 anyFailure = true;
             }
@@ -135,7 +137,11 @@ public sealed class WorkbookReimportService
             messages.Add("No block comment/title changes detected — nothing to reimport or recompile.");
         }
 
-        return new WorkbookReimportResult { Success = !anyFailure, Messages = messages };
+        return new WorkbookReimportResult
+        {
+            Success = !anyFailure, ImportFailed = sheetFailed || blocks is { ImportFailed: true }, Compile = blocks?.Compile,
+            TouchedBlocks = blocks?.TouchedBlocks ?? Array.Empty<string>(), Messages = messages,
+        };
     }
 
     private static string Describe(Exception ex) =>

@@ -99,15 +99,19 @@
                 <DockPanel>
                     <WrapPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
                         <Button x:Name="ReimportButton" Content="Reimport &amp; Compile" Style="{StaticResource PrimaryButton}" Margin="0,0,10,0" Click="Reimport_Click" ToolTip="Apply the edited workbooks in the export folder to the project"/>
-                        <Button x:Name="ImportFolderButton" Content="Import Folder..." Style="{StaticResource PrimaryButton}" Click="ImportFolder_Click" ToolTip="Import *.tags.tsv tag tables and *.xml blocks (subfolders = block groups) from a folder you choose"/>
+                        <Button x:Name="ImportFolderButton" Content="Import Folder..." Style="{StaticResource PrimaryButton}" Margin="0,0,10,0" Click="ImportFolder_Click" ToolTip="Import *.tags.tsv tag tables and *.xml blocks (subfolders = block groups) from a folder you choose"/>
+                        <Button x:Name="ImportHmiButton" Content="Import HMI..." Style="{StaticResource PrimaryButton}" Click="ImportHmi_Click" ToolTip="Import the HMI screens, tags and lists you edited or added in an HMI export folder (HMI\&lt;device&gt;)"/>
                     </WrapPanel>
                     <StackPanel>
                         <TextBlock Text="Import into project" Style="{StaticResource SubHeader}"/>
-                        <TextBlock Text="Changes the project. It's compiled, and saved only if the compile is clean." Style="{StaticResource HintText}"/>
+                        <TextBlock Text="Changes the project. It's compiled; if the compile has errors you're asked whether to save anyway." Style="{StaticResource HintText}"/>
                         <TextBlock Style="{StaticResource HintText}" Margin="0,8,0,0">
                             <Run FontWeight="SemiBold" Foreground="{DynamicResource Text.Body}">Reimport</Run> applies your edited workbooks from the export folder.
-                            <Run FontWeight="SemiBold" Foreground="{DynamicResource Text.Body}">Import Folder</Run> brings in *.tags.tsv and *.xml files from a folder you pick.
+                            <Run FontWeight="SemiBold" Foreground="{DynamicResource Text.Body}">Import Folder</Run> brings in *.tags.tsv, *.xml and *.scl files, plus any HMI export, from a folder you pick.
+                            <Run FontWeight="SemiBold" Foreground="{DynamicResource Text.Body}">Import HMI</Run> brings back the HMI objects you changed or added in an HMI export.
                         </TextBlock>
+                        <CheckBox x:Name="OpenAfterImportCheckBox" Content="Open the project in TIA Portal afterwards" Style="{StaticResource OptionCheckBox}" Margin="0,8,0,0" ToolTip="After an import that ends without errors, open the project in the TIA Portal GUI (the headless session is closed first)"/>
+                        <CheckBox x:Name="SaveWithErrorsCheckBox" Content="Save even if the compile has errors (don't ask)" Style="{StaticResource OptionCheckBox}" Margin="0,4,0,0" ToolTip="When everything imported but the compile has errors (for example errors that were already in the project), save anyway without asking. The errors are listed in the log, and the project can't be downloaded until they're fixed. A file that fails to import still means no save."/>
                     </StackPanel>
                 </DockPanel>
             </Border>

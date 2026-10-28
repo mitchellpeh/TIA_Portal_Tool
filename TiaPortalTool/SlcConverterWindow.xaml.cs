@@ -454,12 +454,12 @@ public partial class SlcConverterWindow : Window
 
     private void Log(string text, LogLevel level) => _log.Append(text, level);
 
-    /// <summary>Keeps a copy of the import log in &lt;output&gt;\logs, since TIA runs take minutes and the window may be closed.</summary>
+    /// <summary>Keeps a copy of the import log in &lt;output&gt;\TIA_Portal_Tool_Logs (Import Folder skips it), since TIA runs take minutes and the window may be closed.</summary>
     private void SaveLog(string outputDirectory)
     {
         try
         {
-            var directory = Path.Combine(outputDirectory, "logs");
+            var directory = Path.Combine(outputDirectory, FolderImportService.LogFolderName);
             Directory.CreateDirectory(directory);
             File.WriteAllText(Path.Combine(directory, $"{DateTime.Now:yyyy-MM-dd_HHmmss}_slc-import.log"), _log.Text);
         }

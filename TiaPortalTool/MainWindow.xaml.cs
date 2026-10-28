@@ -47,6 +47,7 @@ public partial class MainWindow : Window
     private readonly WorkbookReimportService _workbookReimportService = new();
     private readonly FolderImportService _folderImportService = new();
     private readonly HmiExportService _hmiExportService = new();
+    private readonly HmiImportService _hmiImportService = new();
     private readonly AppSettingsService _appSettingsService = new();
 
     // The Output pane: colour-coded log that pulses when TIA Portal may be waiting for the user.
@@ -114,6 +115,8 @@ public partial class MainWindow : Window
         ExportCommentsCheckBox.IsChecked = settings.ExportBlocks;
         CompileBeforeExportCheckBox.IsChecked = settings.CompileBeforeExport;
         ExportHmiCheckBox.IsChecked = settings.ExportHmi;
+        OpenAfterImportCheckBox.IsChecked = settings.OpenProjectAfterImport;
+        SaveWithErrorsCheckBox.IsChecked = settings.SaveWithCompileErrors;
         UpdateProjectHint();
         UpdateOutputHint();
 
@@ -148,6 +151,8 @@ public partial class MainWindow : Window
         settings.ExportBlocks = ExportCommentsCheckBox.IsChecked == true;
         settings.CompileBeforeExport = CompileBeforeExportCheckBox.IsChecked == true;
         settings.ExportHmi = ExportHmiCheckBox.IsChecked == true;
+        settings.OpenProjectAfterImport = OpenAfterImportCheckBox.IsChecked == true;
+        settings.SaveWithCompileErrors = SaveWithErrorsCheckBox.IsChecked == true;
         _appSettingsService.Save(settings);
     }
 
@@ -417,30 +422,39 @@ public partial class MainWindow : Window
         if (!Confirm(
                 "Confirm reimport",
                 $"Apply the edited workbooks in\n{exportDirectory}\n\nto the project\n{projectPath}?\n\n"
-                + "The PLC program is compiled, and the project is saved only if the compile is clean. "
+                + $"The PLC program is compiled{SaveRule()} "
                 + "Archive the project first if you want a backup."))
         {
             return;
         }
 
+        var saveWithErrors = SaveWithErrorsCheckBox.IsChecked == true;
         await RunOperationAsync(
             "Reimport",
             "Opening the project and reimporting...",
-            (progress, cancellationToken) => RunReimport(projectPath, exportDirectory, progress, cancellationToken),
+            (progress, cancellationToken) => RunReimport(projectPath, exportDirectory, saveWithErrors, progress, cancellationToken),
             logDirectory: exportDirectory,
-            resultFolder: null);
+            resultFolder: null,
+            openProjectAfter: OpenAfterImportCheckBox.IsChecked == true ? projectPath : null);
     }
 
-    private OperationResult RunReimport(string projectPath, string exportDirectory, IProgress<string> progress, CancellationToken cancellationToken) =>
+    private OperationResult RunReimport(string projectPath, string exportDirectory, bool saveWithErrors, IProgress<string> progress, CancellationToken cancellationToken) =>
         WithPlcSoftware(projectPath, "Reimport", progress, cancellationToken, (session, plcSoftware, assembly) =>
         {
             WorkbookReimportResult result = _workbookReimportService.ReimportAndCompile(plcSoftware, assembly, exportDirectory, progress, cancellationToken);
             var messages = result.Messages.ToList();
 
+            var compileErrors = 0;
             if (!result.Success)
             {
-                messages.Add("Project NOT saved due to compile errors or failures above.");
-                return new OperationResult(Outcome.Error, "Reimport finished with errors. The project was not saved.", messages);
+                if (!result.OnlyCompileFailed
+                    || !SaveDespiteCompileErrors(new[] { result.Compile! }, result.TouchedBlocks, saveWithErrors, messages))
+                {
+                    messages.Add("Project NOT saved due to compile errors or failures above.");
+                    return new OperationResult(Outcome.Error, "Reimport finished with errors. The project was not saved.", messages);
+                }
+
+                compileErrors = Math.Max(1, result.Compile!.Errors.Count);
             }
 
             // A cancel that arrived during the compile still means "don't save".
@@ -448,7 +462,9 @@ public partial class MainWindow : Window
             progress.Report("Saving the project...");
             session.Save();
             messages.Add("Project saved.");
-            return new OperationResult(Outcome.Success, "Reimport completed and the project was saved.", messages);
+            return compileErrors == 0
+                ? new OperationResult(Outcome.Success, "Reimport completed and the project was saved.", messages)
+                : new OperationResult(Outcome.Warning, "Reimport completed and the project was saved " + WithErrorsNote(compileErrors), messages);
         });
 
     private async void ImportFolder_Click(object sender, RoutedEventArgs e)
@@ -461,7 +477,7 @@ public partial class MainWindow : Window
 
         using var dialog = new System.Windows.Forms.FolderBrowserDialog
         {
-            Description = "Select the import folder (*.tags.tsv tag tables, *.xml blocks; subfolders = block groups)"
+            Description = "Select the import folder (*.tags.tsv tag tables, *.xml blocks, *.scl sources; subfolders = block groups; HMI\\<device> = HMI export)"
         };
 
         var key = ProjectKey(projectPath);
@@ -480,41 +496,290 @@ public partial class MainWindow : Window
         {
             _importFolders[key] = importFolder;
         }
+        var hmiFolders = HmiImportService.FindHmiFolders(importFolder);
+        var hmiNote = hmiFolders.Count == 0
+            ? string.Empty
+            : $"\n\nHMI exports found, imported too (changed and new objects; for objects also changed in TIA since the export you're asked which version to keep):\n{string.Join("\n", hmiFolders)}";
         if (!Confirm(
                 "Confirm import",
-                $"Import tag tables and blocks from\n{importFolder}\n\ninto the project\n{projectPath}?\n\n"
-                + "Tags and blocks with the same names are replaced. The PLC program is compiled, and the project "
-                + "is saved only if the compile is clean. Archive the project first if you want a backup."))
+                $"Import tag tables and blocks from\n{importFolder}\n\ninto the project\n{projectPath}?{hmiNote}\n\n"
+                + $"Tags and blocks with the same names are replaced. The PLC program (and any HMI imported into) is compiled{SaveRule()} "
+                + "Archive the project first if you want a backup."))
         {
             return;
         }
 
+        var saveWithErrors = SaveWithErrorsCheckBox.IsChecked == true;
         await RunOperationAsync(
             "Import Folder",
             "Opening the project and importing...",
-            (progress, cancellationToken) => RunFolderImport(projectPath, importFolder, progress, cancellationToken),
-            logDirectory: GetExportDirectory(projectPath),
-            resultFolder: null);
+            (progress, cancellationToken) => RunFolderImport(projectPath, importFolder, saveWithErrors, progress, cancellationToken),
+            logDirectory: importFolder,
+            resultFolder: null,
+            openProjectAfter: OpenAfterImportCheckBox.IsChecked == true ? projectPath : null);
     }
 
-    private OperationResult RunFolderImport(string projectPath, string importFolder, IProgress<string> progress, CancellationToken cancellationToken) =>
+    private OperationResult RunFolderImport(string projectPath, string importFolder, bool saveWithErrors, IProgress<string> progress, CancellationToken cancellationToken) =>
         WithPlcSoftware(projectPath, "Import", progress, cancellationToken, (session, plcSoftware, assembly) =>
         {
             FolderImportResult result = _folderImportService.ImportAndCompile(plcSoftware, assembly, importFolder, progress, cancellationToken);
             var messages = result.Messages.ToList();
 
+            // Asked right after the PLC compile, so a "no" doesn't wait for a slow HMI import first.
+            var compileErrors = 0;
             if (!result.Success)
             {
-                messages.Add("Project NOT saved due to the import/compile errors above.");
-                return new OperationResult(Outcome.Error, "Import finished with errors. The project was not saved.", messages);
+                if (!result.OnlyCompileFailed
+                    || !SaveDespiteCompileErrors(new[] { result.Compile! }, result.TouchedBlocks, saveWithErrors, messages))
+                {
+                    messages.Add("Project NOT saved due to the import/compile errors above.");
+                    return new OperationResult(Outcome.Error, "Import finished with errors. The project was not saved.", messages);
+                }
+
+                compileErrors += Math.Max(1, result.Compile!.Errors.Count);
+            }
+
+            // HMI exports in the same folder: same conflict check as Import HMI, so a change made in TIA is never lost unasked.
+            HmiImportResult? hmi = null;
+            if (HmiImportService.FindHmiFolders(importFolder).Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                hmi = _hmiImportService.ImportAll(session.Project, assembly, importFolder, new HmiImportOptions { ResolveConflict = AskConflict }, progress, cancellationToken);
+                messages.AddRange(hmi.Messages);
+                if (hmi.Warnings.Count > 0)
+                {
+                    messages.Add($"{hmi.Warnings.Count} HMI warning(s):");
+                    messages.AddRange(hmi.Warnings.Select(w => "  " + w));
+                }
+
+                if (hmi.FailedCount > 0
+                    || (hmi.CompileFailed && !SaveDespiteCompileErrors(hmi.FailedCompiles, null, saveWithErrors, messages)))
+                {
+                    messages.Add("Project NOT saved due to the HMI import/compile errors above.");
+                    return new OperationResult(Outcome.Error, "HMI import finished with errors. The project was not saved.", messages);
+                }
+
+                compileErrors += hmi.FailedCompiles.Sum(c => Math.Max(1, c.Errors.Count));
+
+                if (result.NothingForPlc && hmi.ImportedCount == 0)
+                {
+                    return hmi.ConflictCount > 0
+                        ? new OperationResult(Outcome.Warning, $"Nothing imported: {hmi.ConflictCount} HMI object(s) were kept as they are in TIA (see the warnings).", messages)
+                        : new OperationResult(Outcome.Success, "Nothing to import: the HMI objects in the folder already match the project.", messages);
+                }
+            }
+
+            // Project texts last: they can name HMI alarms and blocks imported above.
+            foreach (var textFile in ProjectTextService.FindFiles(importFolder))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress.Report($"Importing project texts {Path.GetFileName(textFile)}...");
+                if (!new ProjectTextService().Import(session.Project, textFile, messages))
+                {
+                    messages.Add("Project NOT saved due to the project text import error above.");
+                    return new OperationResult(Outcome.Error, "Project text import failed. The project was not saved.", messages);
+                }
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             progress.Report("Saving the project...");
             session.Save();
+            if (hmi is not null)
+            {
+                HmiImportService.WriteManifests(hmi);
+            }
+
             messages.Add("Project saved.");
-            return new OperationResult(Outcome.Success, "Import completed and the project was saved.", messages);
+            if (compileErrors > 0)
+            {
+                var kept = hmi is { ConflictCount: > 0 } ? $" {hmi.ConflictCount} HMI object(s) were kept as they are in TIA." : string.Empty;
+                return new OperationResult(Outcome.Warning, "Import completed and the project was saved " + WithErrorsNote(compileErrors) + kept, messages);
+            }
+
+            return hmi is { ConflictCount: > 0 }
+                ? new OperationResult(Outcome.Warning, $"Import completed and the project was saved; {hmi.ConflictCount} HMI object(s) were kept as they are in TIA.", messages)
+                : new OperationResult(Outcome.Success, "Import completed and the project was saved.", messages);
         });
+
+    private async void ImportHmi_Click(object sender, RoutedEventArgs e)
+    {
+        var projectPath = RequireProject("importing");
+        if (projectPath is null)
+        {
+            return;
+        }
+
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = "Select the HMI export to import: an HMI\\<device> folder, the HMI folder, or the export folder"
+        };
+
+        var defaultFolder = Path.Combine(GetExportDirectory(projectPath), HmiExportService.HmiFolderName);
+        if (Directory.Exists(defaultFolder))
+        {
+            dialog.SelectedPath = defaultFolder;
+        }
+
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+        {
+            return;
+        }
+
+        var hmiFolders = HmiImportService.FindHmiFolders(dialog.SelectedPath);
+        if (hmiFolders.Count == 0)
+        {
+            ShowNotice($"No HMI export found in {dialog.SelectedPath}. Pick a folder made by Export with the HMI option (it has an hmi_manifest.json).");
+            return;
+        }
+
+        if (!Confirm(
+                "Confirm HMI import",
+                $"Import the HMI objects changed or added in\n{string.Join("\n", hmiFolders)}\n\ninto the project\n{projectPath}?\n\n"
+                + "Objects with the same names are replaced. For objects that were also changed in TIA since the export, you're "
+                + $"asked which version to keep. The HMI is compiled{SaveRule()} "
+                + "Archive the project first if you want a backup."))
+        {
+            return;
+        }
+
+        var saveWithErrors = SaveWithErrorsCheckBox.IsChecked == true;
+        await RunOperationAsync(
+            "Import HMI",
+            "Opening the project and importing the HMI...",
+            (progress, cancellationToken) => RunHmiImport(projectPath, dialog.SelectedPath, saveWithErrors, progress, cancellationToken),
+            logDirectory: dialog.SelectedPath,
+            resultFolder: null,
+            openProjectAfter: OpenAfterImportCheckBox.IsChecked == true ? projectPath : null);
+    }
+
+    private OperationResult RunHmiImport(string projectPath, string folder, bool saveWithErrors, IProgress<string> progress, CancellationToken cancellationToken) =>
+        WithSession(projectPath, "Import HMI", progress, cancellationToken, (session, assembly) =>
+        {
+            HmiImportResult result = _hmiImportService.ImportAll(session.Project, assembly, folder, new HmiImportOptions { ResolveConflict = AskConflict }, progress, cancellationToken);
+            var messages = result.Messages.ToList();
+            if (result.Warnings.Count > 0)
+            {
+                messages.Add($"{result.Warnings.Count} warning(s):");
+                messages.AddRange(result.Warnings.Select(w => "  " + w));
+            }
+
+            if (result.ImportedCount == 0 && result.FailedCount == 0)
+            {
+                var nothing = result.ConflictCount > 0
+                    ? $"Nothing imported: {result.ConflictCount} object(s) were kept as they are in TIA (see the warnings)."
+                    : "Nothing to import: no HMI file was changed or added since the export.";
+                return new OperationResult(result.ConflictCount > 0 ? Outcome.Warning : Outcome.Success, nothing, messages);
+            }
+
+            if (!result.CanSave
+                && (!result.OnlyCompileFailed || !SaveDespiteCompileErrors(result.FailedCompiles, null, saveWithErrors, messages)))
+            {
+                messages.Add("Project NOT saved due to the import/compile errors above.");
+                return new OperationResult(Outcome.Error, "HMI import finished with errors. The project was not saved.", messages);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            progress.Report("Saving the project...");
+            session.Save();
+            HmiImportService.WriteManifests(result);
+            messages.Add("Project saved.");
+            if (result.CompileFailed)
+            {
+                var errors = result.FailedCompiles.Sum(c => Math.Max(1, c.Errors.Count));
+                var kept = result.ConflictCount > 0 ? $" {result.ConflictCount} object(s) were kept as they are in TIA." : string.Empty;
+                return new OperationResult(Outcome.Warning, "HMI import completed and the project was saved " + WithErrorsNote(errors) + kept, messages);
+            }
+
+            return result.ConflictCount > 0
+                ? new OperationResult(Outcome.Warning, $"HMI import completed and the project was saved; {result.ConflictCount} object(s) were kept as they are in TIA.", messages)
+                : new OperationResult(Outcome.Success, "HMI import completed and the project was saved.", messages);
+        });
+
+    /// <summary>The end of the confirm dialogs' "... is compiled" sentence, following the "save even with errors" box.</summary>
+    private string SaveRule() => SaveWithErrorsCheckBox.IsChecked == true
+        ? ", and the project is saved even if the compile has errors (as long as every file imported)."
+        : "; if the compile has errors you're asked whether to save anyway.";
+
+    private static string WithErrorsNote(int errors) =>
+        $"with {errors} compile error(s). It can't be downloaded until they're fixed (see the log).";
+
+    /// <summary>
+    /// Everything imported but a compile has errors: logs them (split by whether they're in a block this import brought
+    /// in, when <paramref name="touchedBlocks"/> is given), then saves when the "save even with errors" box was ticked,
+    /// or asks. Called from the import's worker thread, so the prompt runs on the UI thread.
+    /// </summary>
+    private bool SaveDespiteCompileErrors(IReadOnlyList<CompileOutcome> compiles, IReadOnlyCollection<string>? touchedBlocks, bool saveWithErrors, List<string> messages)
+    {
+        var errors = compiles.SelectMany(c => c.Errors).ToList();
+        var lines = new List<string>();
+        if (touchedBlocks is null)
+        {
+            lines.AddRange(errors.Select(e => "  " + e));
+        }
+        else
+        {
+            bool Touched(CompileError e) => touchedBlocks.Contains(e.BlockName, StringComparer.OrdinalIgnoreCase);
+            var inImported = errors.Where(Touched).ToList();
+            var inOthers = errors.Where(e => !Touched(e)).ToList();
+            if (inImported.Count > 0)
+            {
+                lines.Add($"In blocks this import brought in ({inImported.Count}):");
+                lines.AddRange(inImported.Select(e => "  " + e));
+            }
+
+            if (inOthers.Count > 0)
+            {
+                lines.Add($"In blocks this import didn't change ({inOthers.Count}): already in the project, or caused by imported tags or types:");
+                lines.AddRange(inOthers.Select(e => "  " + e));
+            }
+        }
+
+        if (errors.Count == 0)
+        {
+            lines.Add("  (TIA listed no individual errors; see the compiler messages above.)");
+        }
+
+        var what = string.Join(" and ", compiles.Select(c => c.What));
+        messages.Add($"Compile errors in the {what}:");
+        messages.AddRange(lines.Select(l => "  " + l));
+
+        if (saveWithErrors)
+        {
+            messages.Add("\"Save even if the compile has errors\" is ticked: saving anyway.");
+            return true;
+        }
+
+        const int MaxShown = 15;
+        var shown = string.Join("\n", lines.Take(MaxShown)) + (lines.Count > MaxShown ? $"\n  ... and {lines.Count - MaxShown} more line(s) in the log" : string.Empty);
+        var question = $"Everything imported, but the compile of the {what} has {(errors.Count == 0 ? "errors" : $"{errors.Count} error(s)")}:\n\n{shown}\n\n"
+                       + "Save the project anyway? It can't be downloaded until the errors are fixed.\n\n"
+                       + "Yes = save with the errors\nNo = don't save (the project file stays as it was)";
+        var save = Dispatcher.Invoke(() => MessageBox.Show(this, question, "Compile errors", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)) == MessageBoxResult.Yes;
+        messages.Add(save ? "You chose to save the project with the compile errors." : "You chose not to save the project.");
+        return save;
+    }
+
+    /// <summary>
+    /// Asks which version to keep for an HMI object changed both in its file and in TIA. Called from the import's worker
+    /// thread, so the prompt runs on the UI thread.
+    /// </summary>
+    private HmiConflictChoice AskConflict(HmiConflict conflict)
+    {
+        var differences = conflict.Differences.Count == 0
+            ? "  (no difference left once values TIA works out itself are ignored)"
+            : string.Join("\n", conflict.Differences.Select(d => "  " + d));
+        var why = conflict.HasBaseline
+            ? "was changed in TIA since the export, and its file was changed too."
+            : "differs from its file, and the export has no hash to tell which is newer.";
+        var message = $"{conflict.Label} {why}\n\nWhat differs (file vs TIA now):\n{differences}\n\n"
+                      + "Yes = import the file over TIA's version\nNo = keep TIA's version (listed as a conflict)\nCancel = stop the import; nothing is saved";
+        return Dispatcher.Invoke(() => MessageBox.Show(this, message, "HMI object changed on both sides", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning, MessageBoxResult.No)) switch
+        {
+            MessageBoxResult.Yes => HmiConflictChoice.Overwrite,
+            MessageBoxResult.No => HmiConflictChoice.Keep,
+            _ => HmiConflictChoice.Cancel,
+        };
+    }
 
     private async void Diagnostics_Click(object sender, RoutedEventArgs e)
     {
@@ -581,7 +846,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task RunOperationAsync(string actionName, string busyText, Func<IProgress<string>, CancellationToken, OperationResult> work, string? logDirectory, string? resultFolder, bool cancellable = true)
+    private async Task RunOperationAsync(string actionName, string busyText, Func<IProgress<string>, CancellationToken, OperationResult> work, string? logDirectory, string? resultFolder, bool cancellable = true, string? openProjectAfter = null)
     {
         ClearLog();
         ShowRunView(actionName, logDirectory ?? resultFolder);
@@ -651,11 +916,30 @@ public partial class MainWindow : Window
             OpenResultFolderButton.Visibility = Visibility.Visible;
         }
 
+        if (openProjectAfter is not null && result.Outcome is Outcome.Success or Outcome.Warning)
+        {
+            OpenProjectInTia(openProjectAfter);
+        }
+
         CancelButton.Visibility = Visibility.Collapsed;
         _cancellation.Dispose();
         _cancellation = null;
         SetBusy(false);
         UpdateOutputHint();
+    }
+
+    /// <summary>Opens the project in the TIA Portal GUI through the .ap* file association.</summary>
+    private void OpenProjectInTia(string projectPath)
+    {
+        try
+        {
+            AppendLog($"Opening {Path.GetFileName(projectPath)} in TIA Portal...");
+            Process.Start(new ProcessStartInfo(projectPath) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
+        {
+            AppendLog($"Couldn't open the project in TIA Portal: {ex.Message}");
+        }
     }
 
     // ---- Setup view (pick what to do) and run view (watch it happen) ----
@@ -733,9 +1017,10 @@ public partial class MainWindow : Window
 
         foreach (var control in new Control[]
                  {
-                     ExportButton, ReimportButton, ImportFolderButton, DiagnosticsButton,
+                     ExportButton, ReimportButton, ImportFolderButton, ImportHmiButton, DiagnosticsButton,
                      ProjectPathTextBox, BrowseProjectButton, OutputDirectoryTextBox, BrowseOutputButton,
-                     ExportTagsCheckBox, ExportCommentsCheckBox, CompileBeforeExportCheckBox, ExportHmiCheckBox
+                     ExportTagsCheckBox, ExportCommentsCheckBox, CompileBeforeExportCheckBox, ExportHmiCheckBox,
+                     OpenAfterImportCheckBox, SaveWithErrorsCheckBox
                  })
         {
             control.IsEnabled = !busy;
@@ -843,12 +1128,12 @@ public partial class MainWindow : Window
 
     private void AppendLog(string text, LogLevel? level = null) => _log.Append(text, level);
 
-    /// <summary>Opens &lt;output&gt;\logs\&lt;timestamp&gt;_&lt;action&gt;.log for this run; returns its path, or null if it couldn't be created.</summary>
+    /// <summary>Opens &lt;folder&gt;\TIA_Portal_Tool_Logs\&lt;timestamp&gt;_&lt;action&gt;.log for this run; returns its path, or null if it couldn't be created.</summary>
     private string? StartLogFile(string outputDirectory, string actionName)
     {
         try
         {
-            var logDirectory = Path.Combine(outputDirectory, "logs");
+            var logDirectory = Path.Combine(outputDirectory, FolderImportService.LogFolderName);
             Directory.CreateDirectory(logDirectory);
             var slug = actionName.ToLowerInvariant().Replace(' ', '-');
             var logPath = Path.Combine(logDirectory, $"{DateTime.Now:yyyy-MM-dd_HHmmss}_{slug}.log");

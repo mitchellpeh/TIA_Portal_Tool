@@ -84,14 +84,266 @@ public static class HeadlessCommands
             return result.ExportedCount > 0 ? 0 : 1;
         }
 
+        if (args.Length >= 3 && args[0] == "hmi-import")
+        {
+            return HmiImport(args[1], args[2], args.Skip(3).ToArray());
+        }
+
+        if (args.Length >= 3 && args[0] == "library-probe")
+        {
+            return LibraryProbe(args[1], args[2], args.Length > 3 ? args[3] : string.Empty);
+        }
+
+        if (args.Length >= 3 && args[0] == "export-projecttexts")
+        {
+            var progress = new ConsoleProgress();
+            using var session = new TiaSessionService().Open(args[1], progress);
+            var messages = new List<string>();
+            new ProjectTextService().Export(session.Project, Path.GetFullPath(args[2]), args.Length > 3 ? args[3] : "en-US",
+                args.Length > 4 ? args[4] : "de-DE", messages);
+            messages.ForEach(Console.WriteLine);
+            return 0;
+        }
+
+        // A fresh test project with one CPU and an empty program, e.g. for import-folder tests.
+        if (args.Length >= 3 && args[0] == "new-project")
+        {
+            var progress = new ConsoleProgress();
+            using var session = new TiaSessionService().Create(Path.GetFullPath(args[1]), args[2], progress);
+            PlcDeviceCreator.CreatePlc(session.Project, args.Skip(3).Contains("--1200"), progress);
+            session.Save();
+            Console.WriteLine("Created and saved.");
+            return 0;
+        }
+
+        if (args.Length >= 3 && args[0] == "import-folder")
+        {
+            return ImportFolder(args[1], args[2], args.Skip(3).Contains("--no-save"), args.Skip(3).Contains("--force"),
+                args.Skip(3).Contains("--save-with-errors"));
+        }
+
         if (args.Length == 0 || args[0] != "slc-import")
         {
             Console.Error.WriteLine("Usage: " + Usage + "\n   or: scl-export <project.apNN> <source.scl> <export folder>"
-                                    + "\n   or: export-blocks <project.apNN> <export folder>\n   or: hmi-export <project.apNN> <export folder>");
+                                    + "\n   or: export-blocks <project.apNN> <export folder>\n   or: hmi-export <project.apNN> <export folder>"
+                                    + "\n   or: " + HmiImportUsage
+                                    + "\n   or: import-folder <project.apNN> <folder> [--force] [--save-with-errors] [--no-save]"
+                                    + "\n   or: new-project <dir> <name> [--1200]"
+                                    + "\n   or: export-projecttexts <project.apNN> <out.projecttexts.xlsx> [source en-US] [target de-DE]");
             return 2;
         }
 
         return SlcImport(args.Skip(1).ToArray());
+    }
+
+    private const string HmiImportUsage = "hmi-import <project.apNN> <HMI export folder> [--force] [--no-compile] [--no-save]";
+
+    /// <summary>Same HMI import as the Import / Export window's Import HMI button; saves only when the import and compile are clean.</summary>
+    private static int HmiImport(string projectPath, string folder, string[] flags)
+    {
+        var options = new Services.Hmi.HmiImportOptions();
+        var save = true;
+        foreach (var flag in flags)
+        {
+            switch (flag)
+            {
+                case "--force": options.Force = true; break;
+                case "--no-compile": options.Compile = false; break;
+                case "--no-save": save = false; break;
+                default:
+                    Console.Error.WriteLine($"Unknown argument {flag}. Usage: {HmiImportUsage}");
+                    return 2;
+            }
+        }
+
+        var progress = new ConsoleProgress();
+        using var session = new TiaSessionService().Open(projectPath, progress);
+        var assembly = System.Reflection.Assembly.LoadFrom(session.AssemblyPath);
+        var result = new Services.Hmi.HmiImportService().ImportAll(session.Project, assembly, folder, options, progress, CancellationToken.None);
+        foreach (var message in result.Messages)
+        {
+            Console.WriteLine(message);
+        }
+
+        Console.WriteLine($"{result.Warnings.Count} warning(s).");
+        foreach (var warning in result.Warnings)
+        {
+            Console.WriteLine("  " + warning);
+        }
+
+        if (save && result.CanSave)
+        {
+            session.Save();
+            Services.Hmi.HmiImportService.WriteManifests(result);
+            Console.WriteLine("Project saved.");
+        }
+        else
+        {
+            Console.WriteLine(result.ImportedCount == 0 && result.FailedCount == 0 ? "Nothing imported, so nothing to save." : "Project NOT saved.");
+        }
+
+        return result.FailedCount == 0 && !result.CompileFailed ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Lists the project library types (folder path, type class, versions, states, export formats) and exports the
+    /// default/latest version of each type whose path contains <paramref name="filter"/> as SimaticML into
+    /// <paramref name="outFolder"/>. Read-only: the project is never saved.
+    /// </summary>
+    private static int LibraryProbe(string projectPath, string outFolder, string filter)
+    {
+        var progress = new ConsoleProgress();
+        Directory.CreateDirectory(outFolder);
+        using var session = new TiaSessionService().Open(projectPath, progress);
+        var assembly = System.Reflection.Assembly.LoadFrom(session.AssemblyPath);
+        dynamic library = session.Project.ProjectLibrary;
+        var exportOptions = Enum.Parse(assembly.GetType("Siemens.Engineering.ExportOptions")!, "WithDefaults");
+
+        void Walk(dynamic folder, string path)
+        {
+            foreach (dynamic type in folder.Types)
+            {
+                string typePath = path + "/" + (string)type.Name;
+                string formats;
+                try { formats = string.Join(",", (IEnumerable<string>)type.GetSupportedExportFormats()); }
+                catch (Exception ex) { formats = "n/a (" + ex.GetType().Name + ")"; }
+                Console.WriteLine($"{typePath} [{((object)type).GetType().Name}] formats: {formats}");
+                dynamic? last = null;
+                foreach (dynamic version in type.Versions)
+                {
+                    Console.WriteLine($"    v{version.VersionNumber} {version.State}{(version.IsDefault ? " default" : string.Empty)}");
+                    last = version;
+                }
+
+                if (last is null || filter.Length == 0 || typePath.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                var file = Path.Combine(outFolder, System.Text.RegularExpressions.Regex.Replace(typePath.Trim('/'), @"[\\/:*?""<>|]", "_") + ".xml");
+                try
+                {
+                    last.Export(new FileInfo(file), (dynamic)exportOptions);
+                    Console.WriteLine($"    exported -> {file}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"    export failed: {ex.Message.Split('\n')[0]}");
+                }
+            }
+
+            foreach (dynamic sub in folder.Folders)
+            {
+                Walk(sub, path + "/" + (string)sub.Name);
+            }
+        }
+
+        Walk(library.TypeFolder, string.Empty);
+        return 0;
+    }
+
+    /// <summary>
+    /// Same as the Import / Export window's Import Folder button: PLC content, then any HMI export. HMI objects also
+    /// changed in TIA since the export are kept and listed (there's no one to ask), unless <paramref name="force"/>.
+    /// <paramref name="saveWithErrors"/> = the window's "Save even if the compile has errors" box: when every file
+    /// imported, compile errors don't stop the save (exit code 3 then, so a script can tell).
+    /// </summary>
+    private static int ImportFolder(string projectPath, string folder, bool noSave, bool force, bool saveWithErrors)
+    {
+        var progress = new ConsoleProgress();
+        using var session = new TiaSessionService().Open(projectPath, progress);
+        var assembly = System.Reflection.Assembly.LoadFrom(session.AssemblyPath);
+        dynamic plcSoftware = PlcSoftwareLocator.FindFirstPlcSoftware(session.Project, assembly)!;
+        FolderImportResult plc = new FolderImportService().ImportAndCompile((object)plcSoftware, assembly, folder, progress);
+        foreach (var message in plc.Messages)
+        {
+            Console.WriteLine(message);
+        }
+
+        var compileErrors = 0;
+        if (!plc.Success)
+        {
+            if (!saveWithErrors || !plc.OnlyCompileFailed)
+            {
+                Console.WriteLine("PLC import/compile failed. Project NOT saved.");
+                return 1;
+            }
+
+            compileErrors += ReportCompileErrors(plc.Compile!, plc.TouchedBlocks);
+        }
+
+        Services.Hmi.HmiImportResult? hmi = null;
+        if (Services.Hmi.HmiImportService.FindHmiFolders(folder).Count > 0)
+        {
+            hmi = new Services.Hmi.HmiImportService().ImportAll(session.Project, assembly, folder,
+                new Services.Hmi.HmiImportOptions { Force = force }, progress, CancellationToken.None);
+            foreach (var message in hmi.Messages.Concat(hmi.Warnings.Select(w => "  " + w)))
+            {
+                Console.WriteLine(message);
+            }
+
+            if (hmi.FailedCount > 0 || (hmi.CompileFailed && !saveWithErrors))
+            {
+                Console.WriteLine("HMI import/compile failed. Project NOT saved.");
+                return 1;
+            }
+
+            compileErrors += hmi.FailedCompiles.Sum(c => ReportCompileErrors(c, Array.Empty<string>()));
+        }
+
+        foreach (var textFile in ProjectTextService.FindFiles(folder))
+        {
+            var textMessages = new List<string>();
+            var ok = new ProjectTextService().Import(session.Project, textFile, textMessages);
+            textMessages.ForEach(Console.WriteLine);
+            if (!ok)
+            {
+                Console.WriteLine("Project text import failed. Project NOT saved.");
+                return 1;
+            }
+        }
+
+        if (noSave)
+        {
+            Console.WriteLine("--no-save: project NOT saved.");
+            return compileErrors > 0 ? 3 : 0;
+        }
+
+        session.Save();
+        if (hmi is not null)
+        {
+            Services.Hmi.HmiImportService.WriteManifests(hmi);
+        }
+
+        if (compileErrors > 0)
+        {
+            Console.WriteLine($"Project saved with {compileErrors} compile error(s) (--save-with-errors).");
+            return 3;
+        }
+
+        Console.WriteLine("Project saved.");
+        return 0;
+    }
+
+    /// <summary>Lists a failed compile's errors, split by whether the import brought the block in; returns the count (at least 1).</summary>
+    private static int ReportCompileErrors(CompileOutcome compile, IReadOnlyCollection<string> touchedBlocks)
+    {
+        var inImported = compile.Errors.Where(e => touchedBlocks.Contains(e.BlockName, StringComparer.OrdinalIgnoreCase)).ToList();
+        var inOthers = compile.Errors.Except(inImported).ToList();
+        Console.WriteLine($"{compile.What} compile errors, saving anyway (--save-with-errors):");
+        if (inImported.Count > 0)
+        {
+            Console.WriteLine($"  In blocks this import brought in ({inImported.Count}):");
+            inImported.ForEach(e => Console.WriteLine("    " + e));
+        }
+
+        if (inOthers.Count > 0)
+        {
+            Console.WriteLine($"  In other blocks ({inOthers.Count}):");
+            inOthers.ForEach(e => Console.WriteLine("    " + e));
+        }
+
+        return Math.Max(1, compile.Errors.Count);
     }
 
     /// <summary>

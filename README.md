@@ -45,12 +45,14 @@ git -C <TIA_Portal_Tool> worktree add <folder> public
     `TextLists`, `GraphicLists`, `Cycles`, `Scripts`, plus
     `ScreenGlobalElements.xml`, `ScreenOverview.xml` and `hmi_manifest.json`.
     Classic WinCC (Basic/Comfort/RT Advanced, incl. an IPC) for now; a WinCC
-    Unified HMI is reported and skipped. HMI import is next.
+    Unified HMI is reported and skipped. The manifest holds a hash of each
+    file, which Import HMI uses to tell what you edited.
 - **Reimport & Compile**: reads the edited workbooks back, applies tag comments
   and LAD/FBD block/network comments to the project, then compiles the PLC
-  program and reports any compiler errors.
+  program and reports any compiler errors. Saving follows the same rule as
+  Import Folder (below).
 - **Import Folder**: imports a folder of new or changed content, compiles the
-  PLC program, and saves only if the compile is clean:
+  PLC program, and saves if the compile is clean:
   - `<Table>.tags.tsv`: a PLC tag table, created if missing. Tab-separated
     columns `Name`, `DataType`, `Address`, and an optional `en-US` `Comment`;
     lines starting with `#` are ignored. A tag with the same name in that table
@@ -62,8 +64,58 @@ git -C <TIA_Portal_Tool> worktree add <folder> public
     including SCL.
   - `*.xml` PLC data type exports (`SW.Types.*`) are imported into the top
     level of PLC data types, whichever subfolder they're in.
-  - Data types are imported first, then tags, then blocks, so each can use
-    the ones before it.
+  - `*.scl`: SCL sources, generated into blocks (an existing block with the
+    same name is replaced and lands in the top-level group).
+  - Data types are imported first, then global DBs, then SCL sources, then
+    tags, then the other blocks, so each can use the ones before it.
+  - An HMI export inside the folder (an `HMI\<device>` folder with an
+    `hmi_manifest.json`, or that folder itself) is imported into the HMI in
+    the same run, exactly like **Import HMI** (same conflict prompt;
+    the headless `import-folder` has `--force`). The
+    HMI is compiled too. A folder holding only an HMI export works too;
+    nothing is then imported into or compiled in the PLC.
+  - A file that fails to import means no save. When everything imported but
+    a compile has errors (for example errors the project already had), you're
+    asked whether to save anyway; the errors are listed, split into blocks
+    this import brought in and blocks it didn't change. Tick **Save even if
+    the compile has errors (don't ask)** to always save in that case. The run
+    then ends with a warning, and the project can't be downloaded until the
+    errors are fixed. Headless: `import-folder ... --save-with-errors` (exit
+    code 3 when it saved with errors).
+  - An OB that already exists in the project is refused, never replaced:
+    replacing it would lose its process image / event links in the device
+    configuration and any networks added in TIA since the export. Add the
+    networks in TIA by hand, or delete the OB first if you mean to replace it.
+  - The tool's own `TIA_Portal_Tool_Logs` folder is never imported.
+- **Import HMI**: imports an HMI export (an `HMI\<device>` folder, the `HMI`
+  folder, or the export folder) back into the HMI with the same station name:
+  - Only files you edited (their hash differs from the manifest) and new
+    `*.xml` files in the category folders are imported, with override.
+    Subfolders become screen, tag table and script folders as needed.
+  - An object that was also changed in TIA after the export is a conflict.
+    You're asked, per object, whether to import the file over TIA's version,
+    keep TIA's version (it's listed), or cancel the whole import. The prompt
+    lists what differs between the file and TIA, grouped (e.g. one value
+    that changed on 30 tags is one line). Headless (`hmi-import`,
+    `import-folder`) keeps TIA's version and lists the differences unless
+    `--force`.
+  - Values TIA works out by itself don't count as a change: the ID
+    attributes, and the Length and Coding of tags bound to a PLC tag (they
+    follow the PLC data type, so re-importing PLC types changes them). This
+    applies to exports made with this version on; older exports keep the old
+    comparison, so export again to get it.
+  - Long steps (reading a big object back from TIA, importing it,
+    compiling) report once a minute that they're still running and how much
+    CPU TIA used, so a slow step can be told from a hung one.
+  - Order: cycles, text and graphic lists, connections, tag tables, scripts,
+    templates, screens, pop-ups, slide-ins, global elements, screen overview.
+  - Deleted files don't delete objects in TIA.
+  - The HMI is compiled; the project is saved if the compile has no errors
+    (or, with errors, the same ask / **Save even if the compile has errors**
+    rule as Import Folder), and then the manifest is updated so the next
+    import sees those objects as unchanged.
+  - Screens that use faceplates need the faceplate types in the project
+    library. Classic WinCC only.
 - **Diagnostics**: checks the project file and version, which Openness
   assemblies will be tried and in what order, `Siemens TIA Openness` group
   membership, and whether TIA Portal is running. It never loads an Openness
@@ -160,8 +212,11 @@ project, and compiling can't be interrupted, so the cancel takes effect when
 that step finishes. A cancelled export can leave the export folder partly
 updated.
 
-Every export, reimport, and folder import also saves its output log to
-`<output folder>\logs\`, so a long compile-error list survives the next run.
+Every export, reimport, and import also saves its output log in a
+`TIA_Portal_Tool_Logs` folder inside the folder it worked on (the export
+folder, or the folder being imported), so a long compile-error list survives
+the next run. Imports skip that folder. The export folder itself defaults to
+`Desktop\TIAExport\<project name>` unless you set one.
 
 ## Settings
 

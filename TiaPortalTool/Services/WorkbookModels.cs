@@ -45,5 +45,17 @@ public sealed class WorkbookExportResult
 public sealed class WorkbookReimportResult
 {
     public bool Success { get; set; }
+
+    /// <summary>Everything applied and the only problem is the compile: the caller may still save if the user agrees.</summary>
+    public bool OnlyCompileFailed => !Success && !ImportFailed && Compile is { Clean: false };
+
+    public bool ImportFailed { get; set; }
+
+    /// <summary>The PLC compile after the reimport; null when it didn't run.</summary>
+    public CompileOutcome? Compile { get; set; }
+
+    /// <summary>Names of the blocks reimported.</summary>
+    public IReadOnlyCollection<string> TouchedBlocks { get; set; } = Array.Empty<string>();
+
     public IReadOnlyList<string> Messages { get; set; } = Array.Empty<string>();
 }

@@ -81,6 +81,7 @@ public sealed class ClassicHmiExporter : IHmiExporter
             DeviceName = hmi.DeviceName,
             RuntimeName = hmi.RuntimeName,
             Kind = hmi.Kind.ToString(),
+            HashVersion = HmiXmlHash.CurrentVersion,
             Entries = context.Entries
         };
         File.WriteAllText(Path.Combine(hmiDirectory, ManifestFileName), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
@@ -138,7 +139,7 @@ public sealed class ClassicHmiExporter : IHmiExporter
 
             // The options must go in as dynamic: a statically typed object argument won't bind to ExportOptions.
             item.Export(new FileInfo(fullPath), (dynamic)context.ExportOptions);
-            context.Entries.Add(new HmiManifestEntry { Category = category, Name = name, FolderPath = folderPath, File = relativeFile.Replace('\\', '/') });
+            context.Entries.Add(new HmiManifestEntry { Category = category, Name = name, FolderPath = folderPath, File = relativeFile.Replace('\\', '/'), Hash = HmiXmlHash.Compute(fullPath) });
         }
         catch (OperationCanceledException)
         {

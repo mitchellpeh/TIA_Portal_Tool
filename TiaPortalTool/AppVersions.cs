@@ -20,7 +20,7 @@ public static class AppVersions
     }
 
     /// <summary>The TIA Portal Import / Export tool (export to Excel, reimport, Import Folder, diagnostics).</summary>
-    public const string ImportExport = "1.1.1";
+    public const string ImportExport = "1.4.0";
 
     /// <summary>The SLC 500 to TIA Portal converter.</summary>
     public const string SlcConverter = Conversion.Slc.SlcConverter.ToolVersion;

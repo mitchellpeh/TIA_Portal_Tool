@@ -6,6 +6,15 @@ namespace TiaPortalTool.Services;
 public sealed class BlockReimportResult
 {
     public bool Success { get; set; }
+
+    /// <summary>A block didn't import or couldn't be found afterwards.</summary>
+    public bool ImportFailed { get; set; }
+
+    /// <summary>The PLC compile; null when nothing was imported to compile.</summary>
+    public CompileOutcome? Compile { get; set; }
+
+    public IReadOnlyCollection<string> TouchedBlocks { get; set; } = Array.Empty<string>();
+
     public IReadOnlyList<string> Messages { get; set; } = Array.Empty<string>();
 }
 
@@ -70,12 +79,19 @@ public sealed class BlockReimportService
         // unit — the same thing TIA's own "Compile All" does — resolves the call graph
         // itself instead of depending on manifest order.
         cancellationToken.ThrowIfCancellationRequested();
-        if (blocksToCompile.Count > 0 && !PlcCompiler.CompileAll(plcSoftware, assembly, messages, progress))
+        var importFailed = anyFailure;
+        CompileOutcome? compile = null;
+        if (blocksToCompile.Count > 0)
         {
-            anyFailure = true;
+            compile = PlcCompiler.Compile(plcSoftware, assembly, messages, progress);
+            anyFailure |= !compile.Clean;
         }
 
-        return new BlockReimportResult { Success = !anyFailure, Messages = messages };
+        return new BlockReimportResult
+        {
+            Success = !anyFailure, ImportFailed = importFailed, Compile = compile,
+            TouchedBlocks = blocksToCompile.Select(b => b.Name).ToList(), Messages = messages,
+        };
     }
 
     internal static dynamic? FindGroupByPath(dynamic rootGroup, string groupPath)
