@@ -367,6 +367,86 @@ ActivateInactiveCultures. How the import decides what to do:
 - Run headless commands through `tools/runner/OpennessRunner.exe <TiaPortalTool.exe> ...`.
   Starting TiaPortalTool.exe with arguments doesn't run them.
 
+### Gotcha: what an HMI export leaves out, and what an import changes (Import / Export 1.5.0)
+
+Found when a classic RT Advanced import (30 screens, 6 templates) reported
+success, compile 0 errors, and had silently deleted objects and resized others.
+- **The classic screen export omits some screen item types, with no error or
+  warning:** alarm views and trend views at least (the exported screen or
+  template XML has no element for them at all). Other types may be missing
+  too; nothing in the export says so.
+- **`Import` with `Override` replaces the whole screen/template** with the
+  file's contents. Whatever the export omitted is deleted, and the compile is
+  still clean. So "export, edit, import" deletes every alarm/trend view on the
+  objects it imports.
+- **`Resizing` = `KeepRatio` is re-applied on import.** A faceplate instance
+  whose Width/Height don't match its type's ratio gets one side re-fitted
+  (seen: a pipe faceplate's Width 56 -> 95, length snapped to a multiple of
+  its Height), positions kept: 336 instances over 30 screens, 72 on one. The
+  only sign used to be the hash of the re-exported object differing from the
+  file. With `Resizing` = `None` in the file, nothing changed (tested).
+- Which screen holds an omitted object isn't obvious: an alarm view that
+  looked like it belonged to an "Alarms" screen survived importing that
+  screen and was lost by importing all templates. Re-import the whole set
+  only with the guard on.
+- Openness has no object model for classic screen items (only XML export), so
+  nothing in Openness can list what the export left out. The only place the
+  omitted objects show up is the **compiled runtime** in the project folder,
+  `IM\HMI\C\<n>\` (one folder per compiled HMI; `IM\HMI\DeviceFolders.dat`
+  maps an internal object ID, not visible in Openness, to `C\<n>`, so
+  `HmiRuntimeNames.FindFileFor` picks the folder whose file has the most of
+  the HMI's screen/template names). Two files there, both undocumented
+  (`HmiRuntimeNames` is a heuristic read of each, worked out on V20):
+  - `RtData.plf`, the compiler's database. Screen item records are `0x27` +
+    38 hex chars (runtime ID) + a length byte (name length + 1) + the name as
+    single-byte/UTF-8 text. Screens/templates/pop-ups have a header record:
+    length byte (name length + 1) + name + `1E 00 00 00 16 00 00 00`. Old
+    copies of records stay after incremental compiles (the same runtime ID
+    twice), so names are counted by distinct ID. **TIA only writes this file
+    out on save/close**: right after an unsaved compile it was an 18 KB stub,
+    still being written 2 s after `Compile()` returned. So it shows the last
+    *saved* compile: usable at export, not for an import check.
+  - `Generates\pdata.fwc`, the runtime download (about 4 MB for 30 screens).
+    **Every compile rewrites it before `Compile()` returns**, unsaved too, even
+    a compile with nothing to do (about a minute on that HMI; that compile
+    leaves `RtData.plf` alone). Strings are a 16-bit length + UTF-16 text;
+    reading every one that looks like a name (3+ ASCII letters in a row,
+    letters/digits/punctuation only) gives identical counts for two compiles
+    of the same content. It holds texts and system strings too (thousands of
+    runtime messages, font licences), so it's no good for listing what an
+    export left out, only for comparing before/after.
+  - In both, compiler-made names are skipped: `{15732791-10115}`-style
+    references and faceplate parts named
+    `<instance>_<screen>_<long id>_<long id>`, which change when a screen is
+    rebuilt.
+  - Neither file groups objects by screen (not by offset, not by the record
+    number in the `RtData.plf` ID; in `pdata.fwc` all alarm/trend views sit in
+    one block), so a lost name can't be tied to its screen when several were
+    imported.
+- **The lost-object guard** (`HmiRuntimeGuard`): before the first object is
+  replaced, compile the HMI and read `pdata.fwc`; after the import's compile,
+  read it again. A name the runtime has fewer of, and that no imported file or
+  TIA's export of it (read just before the import) holds as any text value,
+  is lost (a `tag.member` name also counts as shown through its tag part).
+  Names the files show are left to the post-import diff below, so items
+  deleted on purpose and edited texts don't trip it. Lost objects, a
+  missing/unreadable file, or a file the second compile didn't rewrite (a
+  compile with errors, no compile) all refuse the save unless
+  `ForceLostObjects` / confirmed.
+- **The export check** (`HmiExportService.CheckRuntimeOnlyObjects`):
+  `RtData.plf` object names that no exported file holds as any text value go
+  into the manifest's `RuntimeOnlyObjects`. Uses the saved file as it is (no
+  compile). On the 30-screen IPC this listed exactly the alarm views, the
+  trend view and one name of unknown origin (`Module`).
+- **The post-import diff** (`HmiItemDiff`): the file vs the object exported
+  right after the import, matched per screen item by `ObjectName` (by `Name`
+  for objects without screen items). Only values the file has and TIA changed
+  or dropped count; IDs, element order and values TIA added are left out.
+  Left/Top/Width/Height changes (or an item missing after the import) need
+  `AcceptLayoutChanges` or a confirmation. `hmi-item-diff <file> <tia>` runs it
+  offline; `hmi-runtime-names <pdata.fwc | RtData.plf | project> [--compile]`
+  lists the runtime names (a file needs no TIA Portal).
+
 ## Reference links
 - Siemens Openness docs: https://support.industry.siemens.com/cs/document/109479187/simatic-step-7-and-wincc-openess?dti=0&lc=en-WZ
 - Siemens Engineering API docs: https://support.industry.siemens.com/cs/document/109773083/siemens-engineering-api?dti=0&lc=en-WZ

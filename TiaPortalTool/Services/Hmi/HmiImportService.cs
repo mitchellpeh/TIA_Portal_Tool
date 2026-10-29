@@ -93,8 +93,20 @@ public sealed class HmiImportService
 
             var importedBefore = result.ImportedCount;
             var failedBefore = result.FailedCount;
+            var objectsBefore = result.ImportedObjects.Count;
+            var changesBefore = result.ItemChanges.Count;
             result.Messages.Add($"HMI {hmi.Describe()}: importing from {hmiFolder}");
-            importer.Import(hmi, assembly, hmiFolder, manifest, options, result, progress, cancellationToken);
+            if (manifest.RuntimeOnlyObjects.Count > 0)
+            {
+                result.Messages.Add($"  At export, the compiled runtime had {manifest.RuntimeOnlyObjects.Count} object(s) the files can't hold: {string.Join(", ", manifest.RuntimeOnlyObjects)}. "
+                                    + "Importing the screen or template that has them deletes them; the lost-object check will stop the save if that happens.");
+            }
+
+            // The guard's "before" reading is taken only once something is actually about to be replaced.
+            HmiRuntimeGuard.Snapshot? snapshot = null;
+            object projectObject = project;
+            importer.Import(hmi, assembly, hmiFolder, manifest, options, result,
+                () => snapshot = HmiRuntimeGuard.TakeBefore(projectObject, hmi, assembly, options, result.Messages, progress), progress, cancellationToken);
 
             if (result.ManifestUpdates.Count > 0)
             {
@@ -117,8 +129,10 @@ public sealed class HmiImportService
             if (result.FailedCount > failedBefore)
             {
                 result.Messages.Add($"HMI {hmi.RuntimeName}: not compiled because of the import failures.");
+                continue;
             }
-            else if (options.Compile)
+
+            if (options.Compile)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var compile = PlcCompiler.Compile(hmi.Software, assembly, result.Messages, progress, $"HMI {hmi.RuntimeName}");
@@ -127,6 +141,19 @@ public sealed class HmiImportService
                     result.CompileFailed = true;
                     result.FailedCompiles.Add(compile);
                 }
+            }
+
+            if (snapshot is not null)
+            {
+                progress.Report($"HMI {hmi.RuntimeName}: checking the compiled runtime for lost objects...");
+                var findings = HmiRuntimeGuard.Check(snapshot, hmi, result.ImportedObjects.Skip(objectsBefore).ToList(), options.Compile);
+                result.GuardFindings.Add(findings);
+                DecideLostObjects(findings, options, result);
+            }
+
+            if (!result.SaveRefused)
+            {
+                DecideLayoutChanges(hmi, result.ItemChanges.Skip(changesBefore).Where(c => c.IsLayout).ToList(), options, result);
             }
         }
 
@@ -144,6 +171,78 @@ public sealed class HmiImportService
         {
             File.WriteAllText(path, JsonSerializer.Serialize(manifest, JsonOptions));
         }
+    }
+
+    /// <summary>Reports the lost-object guard's findings, and refuses the save unless forced or confirmed.</summary>
+    private static void DecideLostObjects(HmiGuardFindings findings, HmiImportOptions options, HmiImportResult result)
+    {
+        var name = findings.RuntimeName;
+        if (findings.Lost.Count == 0 && findings.Problems.Count == 0)
+        {
+            result.Messages.Add($"HMI {name}: lost-object check passed: every object name of the compiled runtime is still there after the import (heuristic, see the notes).");
+            return;
+        }
+
+        if (findings.Problems.Count > 0)
+        {
+            result.Warnings.Add($"HMI {name}: CAN'T VERIFY that the import deleted no objects: {string.Join("; ", findings.Problems)}.");
+        }
+
+        if (findings.Lost.Count > 0)
+        {
+            result.Warnings.Add($"HMI {name}: LOST OBJECTS: {findings.Lost.Count} object(s) of the compiled runtime are gone after the import. Openness exports leave some "
+                                + "screen objects out of the files (alarm views and trend views at least), and an import replaces the whole screen or template, so it deletes them:");
+            result.Warnings.AddRange(findings.Lost.Select(l => "    " + l));
+        }
+
+        result.Warnings.Add("    " + HmiRuntimeGuard.HeuristicNote);
+        if (options.ForceLostObjects)
+        {
+            result.Warnings.Add("    Saving anyway, as asked (force lost objects).");
+            return;
+        }
+
+        if (options.ConfirmLostObjects?.Invoke(findings) == true)
+        {
+            result.Warnings.Add("    You chose to save anyway.");
+            return;
+        }
+
+        result.SaveRefused = true;
+        result.Warnings.Add("    Not saving. Add the objects back in TIA after the import, or override: headless --force-lost-objects, or Yes in the window's prompt.");
+    }
+
+    /// <summary>Reports position/size changes TIA made on import, and refuses the save unless accepted or confirmed.</summary>
+    private static void DecideLayoutChanges(HmiDevice hmi, IReadOnlyList<HmiItemChange> layout, HmiImportOptions options, HmiImportResult result)
+    {
+        if (layout.Count == 0)
+        {
+            return;
+        }
+
+        const int MaxListed = 20;
+        result.Warnings.Add($"HMI {hmi.RuntimeName}: TIA changed the position or size of {layout.Count} screen item value(s) while importing (for example, a faceplate "
+                            + "with Resizing = KeepRatio is re-fitted to its ratio):");
+        result.Warnings.AddRange(layout.Take(MaxListed).Select(c => "    " + c));
+        if (layout.Count > MaxListed)
+        {
+            result.Warnings.Add($"    ... and {layout.Count - MaxListed} more (all of them are listed with the import messages).");
+        }
+
+        if (options.AcceptLayoutChanges)
+        {
+            result.Warnings.Add("    Saving anyway, as asked (accept layout changes).");
+            return;
+        }
+
+        if (options.ConfirmLayoutChanges?.Invoke(layout) == true)
+        {
+            result.Warnings.Add("    You chose to save anyway.");
+            return;
+        }
+
+        result.SaveRefused = true;
+        result.Warnings.Add("    Not saving. Fix the files (e.g. Resizing = None, or sizes that fit the ratio), or override: headless --accept-layout-changes, or Yes in the window's prompt.");
     }
 
     private static HmiDevice? MatchHmi(IReadOnlyList<HmiDevice> hmis, HmiManifest manifest, HmiImportResult result)

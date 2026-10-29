@@ -71,6 +71,16 @@ public sealed class HmiManifest
     public int HashVersion { get; set; } = 1;
 
     public List<HmiManifestEntry> Entries { get; set; } = new();
+
+    /// <summary>
+    /// Object names the compiled runtime had at export but no exported file holds (Openness leaves alarm views, trend
+    /// views and maybe more out of the export). Importing the screen or template that has them deletes them. Empty when
+    /// none were found or the HMI had no compiled runtime (see <see cref="RuntimeChecked"/>).
+    /// </summary>
+    public List<string> RuntimeOnlyObjects { get; set; } = new();
+
+    /// <summary>When the runtime file that check read was written ("" = no check: the HMI wasn't compiled in that project folder).</summary>
+    public string RuntimeChecked { get; set; } = string.Empty;
 }
 
 public sealed class HmiImportOptions
@@ -89,6 +99,95 @@ public sealed class HmiImportOptions
 
     /// <summary>Compile the HMI after importing. The project is saved only if the import and the compile are clean.</summary>
     public bool Compile { get; set; } = true;
+
+    /// <summary>
+    /// Save even when the lost-object guard (<see cref="HmiRuntimeGuard"/>) found objects the import deleted, or
+    /// couldn't check. Without it, <see cref="ConfirmLostObjects"/> decides (or the save is refused without one).
+    /// </summary>
+    public bool ForceLostObjects { get; set; }
+
+    /// <summary>Asked when the guard found lost objects or couldn't check; true = save anyway. Called on the worker thread.</summary>
+    public Func<HmiGuardFindings, bool>? ConfirmLostObjects { get; set; }
+
+    /// <summary>
+    /// Save even when TIA changed the position or size of imported screen items. Without it,
+    /// <see cref="ConfirmLayoutChanges"/> decides (or the save is refused without one).
+    /// </summary>
+    public bool AcceptLayoutChanges { get; set; }
+
+    /// <summary>Asked when TIA changed positions or sizes on import; true = save anyway. Called on the worker thread.</summary>
+    public Func<IReadOnlyList<HmiItemChange>, bool>? ConfirmLayoutChanges { get; set; }
+}
+
+/// <summary>What the lost-object guard found for one HMI.</summary>
+public sealed class HmiGuardFindings
+{
+    public HmiGuardFindings(string runtimeName, IReadOnlyList<HmiLostObject> lost, IReadOnlyList<string> problems)
+    {
+        RuntimeName = runtimeName;
+        Lost = lost;
+        Problems = problems;
+    }
+
+    public string RuntimeName { get; }
+    public IReadOnlyList<HmiLostObject> Lost { get; }
+
+    /// <summary>Why the check couldn't run (no runtime file, nothing readable in it, no compile...). Not empty = unverified.</summary>
+    public IReadOnlyList<string> Problems { get; }
+}
+
+/// <summary>A name the compiled runtime had before the import and has fewer of (or none) after it.</summary>
+public sealed class HmiLostObject
+{
+    public HmiLostObject(string name, int before, int after, IReadOnlyList<string> candidates)
+    {
+        Name = name;
+        Before = before;
+        After = after;
+        Candidates = candidates;
+    }
+
+    public string Name { get; }
+
+    /// <summary>How often the runtime has this name before and after (the same name can be on many screens).</summary>
+    public int Before { get; }
+    public int After { get; }
+
+    /// <summary>The imported screens/templates it was on: one = known; several = one of them (the runtime doesn't say which).</summary>
+    public IReadOnlyList<string> Candidates { get; }
+
+    public override string ToString() =>
+        $"{Name} (in the runtime {Before} -> {After} time(s)){Where()}";
+
+    private string Where() => Candidates.Count switch
+    {
+        0 => string.Empty,
+        1 => $", on {Candidates[0]}",
+        <= 4 => $", on one of: {string.Join(", ", Candidates)}",
+        _ => $", on one of the {Candidates.Count} imported screens/templates",
+    };
+}
+
+/// <summary>An object an import replaced: what its file and TIA's version before the import held, for the guard.</summary>
+public sealed class HmiImportedObject
+{
+    public HmiImportedObject(string label, string category, HashSet<string> fileValues, HashSet<string>? tiaValuesBefore)
+    {
+        Label = label;
+        Category = category;
+        FileValues = fileValues;
+        TiaValuesBefore = tiaValuesBefore;
+    }
+
+    public string Label { get; }
+    public string Category { get; }
+    public HashSet<string> FileValues { get; }
+
+    /// <summary>Null when the object is new.</summary>
+    public HashSet<string>? TiaValuesBefore { get; }
+
+    /// <summary>Screens, templates, pop-ups and slide-ins: what holds screen items.</summary>
+    public bool HoldsScreenItems => Category is "Screen" or "ScreenTemplate" or "ScreenPopup" or "ScreenSlidein" or "ScreenGlobalElements";
 }
 
 /// <summary>An object changed both in its file and in TIA since the export.</summary>
@@ -142,11 +241,23 @@ public sealed class HmiImportResult
     /// <summary>Manifests to rewrite once the project is saved (see HmiImportService.WriteManifests).</summary>
     public List<(string Path, HmiManifest Manifest)> PendingManifests { get; } = new();
 
+    /// <summary>The objects imported, for the lost-object guard.</summary>
+    public List<HmiImportedObject> ImportedObjects { get; } = new();
+
+    /// <summary>Lost objects the guard found, per HMI (empty Lost and Problems = checked and clean).</summary>
+    public List<HmiGuardFindings> GuardFindings { get; } = new();
+
+    /// <summary>Values TIA changed while importing the files (see <see cref="HmiItemDiff"/>).</summary>
+    public List<HmiItemChange> ItemChanges { get; } = new();
+
+    /// <summary>The guard or the layout check stopped the save (not forced, not confirmed).</summary>
+    public bool SaveRefused { get; set; }
+
     /// <summary>True when something was imported and nothing failed: the caller may save.</summary>
-    public bool CanSave => ImportedCount > 0 && FailedCount == 0 && !CompileFailed;
+    public bool CanSave => ImportedCount > 0 && FailedCount == 0 && !CompileFailed && !SaveRefused;
 
     /// <summary>Everything imported and the only problem is the compile: the caller may still save if the user agrees.</summary>
-    public bool OnlyCompileFailed => ImportedCount > 0 && FailedCount == 0 && CompileFailed;
+    public bool OnlyCompileFailed => ImportedCount > 0 && FailedCount == 0 && CompileFailed && !SaveRefused;
 }
 
 public sealed class HmiExportResult

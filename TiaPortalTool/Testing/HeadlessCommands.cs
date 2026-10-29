@@ -89,6 +89,20 @@ public static class HeadlessCommands
             return HmiImport(args[1], args[2], args.Skip(3).ToArray());
         }
 
+        if (args.Length >= 3 && args[0] == "hmi-item-diff")
+        {
+            // What the HMI import reports when TIA stores an object differently from its file (no TIA Portal needed).
+            var changes = Services.Hmi.HmiItemDiff.Compare(Path.GetFileNameWithoutExtension(args[1]), args[1], args[2], Services.Hmi.HmiXmlHash.CurrentVersion);
+            changes.ForEach(c => Console.WriteLine((c.IsLayout ? "LAYOUT " : "       ") + c));
+            Console.WriteLine($"{changes.Count} change(s), {changes.Count(c => c.IsLayout)} position/size.");
+            return 0;
+        }
+
+        if (args.Length >= 2 && args[0] == "hmi-runtime-names")
+        {
+            return HmiRuntimeNamesCommand(args[1], args.Skip(2).Contains("--compile"));
+        }
+
         if (args.Length >= 3 && args[0] == "library-probe")
         {
             return LibraryProbe(args[1], args[2], args.Length > 3 ? args[3] : string.Empty);
@@ -118,8 +132,9 @@ public static class HeadlessCommands
 
         if (args.Length >= 3 && args[0] == "import-folder")
         {
-            return ImportFolder(args[1], args[2], args.Skip(3).Contains("--no-save"), args.Skip(3).Contains("--force"),
-                args.Skip(3).Contains("--save-with-errors"));
+            var flags = args.Skip(3).ToList();
+            return ImportFolder(args[1], args[2], flags.Contains("--no-save"), flags.Contains("--force"), flags.Contains("--save-with-errors"),
+                flags.Contains("--force-lost-objects"), flags.Contains("--accept-layout-changes"));
         }
 
         if (args.Length == 0 || args[0] != "slc-import")
@@ -127,7 +142,9 @@ public static class HeadlessCommands
             Console.Error.WriteLine("Usage: " + Usage + "\n   or: scl-export <project.apNN> <source.scl> <export folder>"
                                     + "\n   or: export-blocks <project.apNN> <export folder>\n   or: hmi-export <project.apNN> <export folder>"
                                     + "\n   or: " + HmiImportUsage
-                                    + "\n   or: import-folder <project.apNN> <folder> [--force] [--save-with-errors] [--no-save]"
+                                    + "\n   or: hmi-runtime-names <pdata.fwc | RtData.plf | project.apNN> [--compile]"
+                                    + "\n   or: hmi-item-diff <imported file.xml> <same object exported from TIA.xml>"
+                                    + "\n   or: import-folder <project.apNN> <folder> [--force] [--force-lost-objects] [--accept-layout-changes] [--save-with-errors] [--no-save]"
                                     + "\n   or: new-project <dir> <name> [--1200]"
                                     + "\n   or: export-projecttexts <project.apNN> <out.projecttexts.xlsx> [source en-US] [target de-DE]");
             return 2;
@@ -136,7 +153,7 @@ public static class HeadlessCommands
         return SlcImport(args.Skip(1).ToArray());
     }
 
-    private const string HmiImportUsage = "hmi-import <project.apNN> <HMI export folder> [--force] [--no-compile] [--no-save]";
+    private const string HmiImportUsage = "hmi-import <project.apNN> <HMI export folder> [--force] [--force-lost-objects] [--accept-layout-changes] [--no-compile] [--no-save]";
 
     /// <summary>Same HMI import as the Import / Export window's Import HMI button; saves only when the import and compile are clean.</summary>
     private static int HmiImport(string projectPath, string folder, string[] flags)
@@ -148,6 +165,8 @@ public static class HeadlessCommands
             switch (flag)
             {
                 case "--force": options.Force = true; break;
+                case "--force-lost-objects": options.ForceLostObjects = true; break;
+                case "--accept-layout-changes": options.AcceptLayoutChanges = true; break;
                 case "--no-compile": options.Compile = false; break;
                 case "--no-save": save = false; break;
                 default:
@@ -179,10 +198,65 @@ public static class HeadlessCommands
         }
         else
         {
-            Console.WriteLine(result.ImportedCount == 0 && result.FailedCount == 0 ? "Nothing imported, so nothing to save." : "Project NOT saved.");
+            Console.WriteLine(result.ImportedCount == 0 && result.FailedCount == 0 ? "Nothing imported, so nothing to save."
+                : result.SaveRefused ? "Project NOT saved (lost objects or layout changes; see the warnings)." : "Project NOT saved.");
         }
 
-        return result.FailedCount == 0 && !result.CompileFailed ? 0 : 1;
+        return result.FailedCount == 0 && !result.CompileFailed && !result.SaveRefused ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Prints the names (with counts) in a classic HMI's compiled runtime: the download (pdata.fwc, what the HMI
+    /// import's lost-object guard reads) and the compiler database (RtData.plf, what the export check reads). Given a
+    /// project, finds each classic HMI's files (compiling first with --compile); the project is never saved. Given a
+    /// .fwc or .plf file, just reads it (no TIA Portal needed).
+    /// </summary>
+    private static int HmiRuntimeNamesCommand(string path, bool compile)
+    {
+        void Print(Services.Hmi.HmiRuntimeNames names)
+        {
+            Console.WriteLine($"{names.Path} (written {names.LastWriteUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}): {names.Counts.Count} name(s)");
+            foreach (var pair in names.Counts.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                Console.WriteLine($"  {pair.Value}\t{pair.Key}");
+            }
+        }
+
+        if (path.EndsWith(".plf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fwc", StringComparison.OrdinalIgnoreCase))
+        {
+            Print(Services.Hmi.HmiRuntimeNames.Read(path));
+            return 0;
+        }
+
+        var progress = new ConsoleProgress();
+        using var session = new TiaSessionService().Open(path, progress);
+        var assembly = System.Reflection.Assembly.LoadFrom(session.AssemblyPath);
+        var exitCode = 0;
+        IReadOnlyList<Services.Hmi.HmiDevice> hmis = Services.Hmi.HmiSoftwareLocator.FindAll(session.Project, assembly);
+        foreach (var hmi in hmis.Where(h => h.Kind == Services.Hmi.HmiKind.ClassicWinCC))
+        {
+            var messages = new List<string>();
+            if (compile)
+            {
+                PlcCompiler.Compile(hmi.Software, assembly, messages, progress, $"HMI {hmi.RuntimeName}");
+            }
+
+            Console.WriteLine($"HMI {hmi.Describe()}:");
+            foreach (var source in new[] { Services.Hmi.HmiRuntimeSource.Download, Services.Hmi.HmiRuntimeSource.Database })
+            {
+                string? file = Services.Hmi.HmiRuntimeGuard.FindRuntimeFile(session.Project, hmi, source);
+                if (file is null)
+                {
+                    Console.WriteLine($"  no compiled {Services.Hmi.HmiRuntimeNames.RelativePath(source)} found.");
+                    exitCode = 1;
+                    continue;
+                }
+
+                Print(Services.Hmi.HmiRuntimeNames.Read(file));
+            }
+        }
+
+        return exitCode;
     }
 
     /// <summary>
@@ -247,8 +321,10 @@ public static class HeadlessCommands
     /// changed in TIA since the export are kept and listed (there's no one to ask), unless <paramref name="force"/>.
     /// <paramref name="saveWithErrors"/> = the window's "Save even if the compile has errors" box: when every file
     /// imported, compile errors don't stop the save (exit code 3 then, so a script can tell).
+    /// <paramref name="forceLostObjects"/> / <paramref name="acceptLayoutChanges"/> = the answer "Yes" to the window's
+    /// lost-object and layout-change prompts (see <see cref="Services.Hmi.HmiRuntimeGuard"/>).
     /// </summary>
-    private static int ImportFolder(string projectPath, string folder, bool noSave, bool force, bool saveWithErrors)
+    private static int ImportFolder(string projectPath, string folder, bool noSave, bool force, bool saveWithErrors, bool forceLostObjects, bool acceptLayoutChanges)
     {
         var progress = new ConsoleProgress();
         using var session = new TiaSessionService().Open(projectPath, progress);
@@ -276,15 +352,15 @@ public static class HeadlessCommands
         if (Services.Hmi.HmiImportService.FindHmiFolders(folder).Count > 0)
         {
             hmi = new Services.Hmi.HmiImportService().ImportAll(session.Project, assembly, folder,
-                new Services.Hmi.HmiImportOptions { Force = force }, progress, CancellationToken.None);
+                new Services.Hmi.HmiImportOptions { Force = force, ForceLostObjects = forceLostObjects, AcceptLayoutChanges = acceptLayoutChanges }, progress, CancellationToken.None);
             foreach (var message in hmi.Messages.Concat(hmi.Warnings.Select(w => "  " + w)))
             {
                 Console.WriteLine(message);
             }
 
-            if (hmi.FailedCount > 0 || (hmi.CompileFailed && !saveWithErrors))
+            if (hmi.FailedCount > 0 || hmi.SaveRefused || (hmi.CompileFailed && !saveWithErrors))
             {
-                Console.WriteLine("HMI import/compile failed. Project NOT saved.");
+                Console.WriteLine(hmi.SaveRefused ? "HMI import: lost objects or layout changes (see the warnings). Project NOT saved." : "HMI import/compile failed. Project NOT saved.");
                 return 1;
             }
 

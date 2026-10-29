@@ -47,6 +47,16 @@ git -C <TIA_Portal_Tool> worktree add <folder> public
     Classic WinCC (Basic/Comfort/RT Advanced, incl. an IPC) for now; a WinCC
     Unified HMI is reported and skipped. The manifest holds a hash of each
     file, which Import HMI uses to tell what you edited.
+  - Openness leaves some screen objects out of an HMI export with no error:
+    **alarm views and trend views** at least. The export compares the HMI's
+    compiled runtime with the exported files, warns about objects that are
+    only in the runtime ("importing the screen or template they're on would
+    delete them"), and lists them in `hmi_manifest.json`
+    (`RuntimeOnlyObjects`). The runtime can't say which screen each one is
+    on, so the list is per HMI. It reads the compiled data saved with the
+    project (`IM\HMI\C\<n>\RtData.plf`), so compile and save the HMI before
+    exporting for an up-to-date check; without it the check is skipped and
+    the export says so.
 - **Reimport & Compile**: reads the edited workbooks back, applies tag comments
   and LAD/FBD block/network comments to the project, then compiles the PLC
   program and reports any compiler errors. Saving follows the same rule as
@@ -70,8 +80,9 @@ git -C <TIA_Portal_Tool> worktree add <folder> public
     tags, then the other blocks, so each can use the ones before it.
   - An HMI export inside the folder (an `HMI\<device>` folder with an
     `hmi_manifest.json`, or that folder itself) is imported into the HMI in
-    the same run, exactly like **Import HMI** (same conflict prompt;
-    the headless `import-folder` has `--force`). The
+    the same run, exactly like **Import HMI** (same conflict, lost-object and
+    layout prompts; the headless `import-folder` has `--force`,
+    `--force-lost-objects` and `--accept-layout-changes`). The
     HMI is compiled too. A folder holding only an HMI export works too;
     nothing is then imported into or compiled in the PLC.
   - A file that fails to import means no save. When everything imported but
@@ -110,10 +121,39 @@ git -C <TIA_Portal_Tool> worktree add <folder> public
   - Order: cycles, text and graphic lists, connections, tag tables, scripts,
     templates, screens, pop-ups, slide-ins, global elements, screen overview.
   - Deleted files don't delete objects in TIA.
+  - An import **replaces the whole screen or template** with what its file
+    holds. Objects the export left out (alarm views, trend views) are then
+    deleted, and TIA reports no error. The **lost-object check** catches
+    this. Before the first object is replaced, the HMI is compiled (about a
+    minute when nothing changed) and the names in its compiled runtime are
+    read. After the import's compile they're read again. A name the runtime
+    has fewer of than before, and that neither the imported files nor TIA's
+    versions of those objects show, is a lost object (names the files do
+    show, such as items deleted on purpose or edited texts, are covered by
+    the comparison below). Lost objects are listed with the imported screens
+    and templates they were on (the runtime can't say which one when several
+    were imported), and the project is **not saved**. In the window you're
+    asked (No is the default); headless needs `--force-lost-objects`.
+  - The check reads TIA's compiled runtime
+    (`IM\HMI\C\<n>\Generates\pdata.fwc` in the project folder), whose format
+    isn't documented, so it's a heuristic. If the file is missing, holds no
+    readable names, or wasn't rewritten by the compile after the import (a
+    compile with errors, or `--no-compile`), the import can't be verified and
+    isn't saved unless forced the same way.
+  - After each import the object is exported again and compared with its
+    file per screen item (by object name). Values TIA changed are listed, e.g.
+    `Screen 'Process/Overview': Pipe_12 Width 56 -> 95` (a faceplate with
+    `Resizing` = `KeepRatio` is re-fitted to its ratio). Changes to
+    **Left / Top / Width / Height** (or an item that's in the file but not in
+    TIA afterwards) need a confirmation before the save: the window asks,
+    headless needs `--accept-layout-changes`. Set `Resizing` to `None` in the
+    file to keep its sizes. IDs, element order and defaults TIA adds aren't
+    reported.
   - The HMI is compiled; the project is saved if the compile has no errors
     (or, with errors, the same ask / **Save even if the compile has errors**
-    rule as Import Folder), and then the manifest is updated so the next
-    import sees those objects as unchanged.
+    rule as Import Folder) and the checks above passed or were confirmed, and
+    then the manifest is updated so the next import sees those objects as
+    unchanged.
   - Screens that use faceplates need the faceplate types in the project
     library. Classic WinCC only.
 - **Diagnostics**: checks the project file and version, which Openness

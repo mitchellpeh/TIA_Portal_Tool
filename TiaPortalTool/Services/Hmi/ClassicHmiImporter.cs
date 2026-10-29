@@ -56,13 +56,13 @@ public sealed class ClassicHmiImporter : IHmiImporter
 
     public HmiKind Kind => HmiKind.ClassicWinCC;
 
-    public void Import(HmiDevice hmi, Assembly assembly, string hmiDirectory, HmiManifest manifest, HmiImportOptions options, HmiImportResult result, IProgress<string> progress, CancellationToken cancellationToken)
+    public void Import(HmiDevice hmi, Assembly assembly, string hmiDirectory, HmiManifest manifest, HmiImportOptions options, HmiImportResult result, Action beforeFirstImport, IProgress<string> progress, CancellationToken cancellationToken)
     {
         var importOptionsType = assembly.GetType("Siemens.Engineering.ImportOptions")
             ?? throw new InvalidOperationException("Siemens.Engineering.ImportOptions type not found.");
         var exportOptionsType = assembly.GetType("Siemens.Engineering.ExportOptions")
             ?? throw new InvalidOperationException("Siemens.Engineering.ExportOptions type not found.");
-        var context = new Context(hmi.Software, hmiDirectory, Enum.Parse(importOptionsType, "Override"), Enum.Parse(exportOptionsType, "WithDefaults"), options, result, manifest.HashVersion, progress, cancellationToken);
+        var context = new Context(hmi.Software, hmiDirectory, Enum.Parse(importOptionsType, "Override"), Enum.Parse(exportOptionsType, "WithDefaults"), options, result, manifest.HashVersion, beforeFirstImport, progress, cancellationToken);
 
         try
         {
@@ -185,6 +185,7 @@ public sealed class ClassicHmiImporter : IHmiImporter
             dynamic? existing = info.SingleImport is not null ? SingleObject(info, context)
                 : container is null ? null : FindItem(container, info.ItemsProperty, name);
             var overwritten = false;
+            HashSet<string>? tiaValuesBefore = null;
             if (existing is not null)
             {
                 var tiaFile = ExportCurrent(existing, context, label);
@@ -196,6 +197,8 @@ public sealed class ClassicHmiImporter : IHmiImporter
                         result.UnchangedCount++;
                         return;
                     }
+
+                    tiaValuesBefore = HmiItemDiff.Values(tiaFile);
 
                     var changedInTia = baseline.Length == 0 || currentHash != baseline;
                     if (changedInTia && !context.Options.Force)
@@ -227,6 +230,7 @@ public sealed class ClassicHmiImporter : IHmiImporter
                 }
             }
 
+            context.RunBeforeFirstImport();
             using var heartbeat = ProgressHeartbeat.Start(context.Progress, $"importing {label}");
             if (info.SingleImport is not null)
             {
@@ -242,18 +246,35 @@ public sealed class ClassicHmiImporter : IHmiImporter
             }
 
             result.ImportedCount++;
+            result.ImportedObjects.Add(new HmiImportedObject(label, info.Category, HmiItemDiff.Values(item.File), tiaValuesBefore));
             result.Messages.Add($"Imported {label}{(existing is null ? " (new)" : overwritten ? " (over TIA's changes, as chosen)" : string.Empty)}.");
 
-            // New baseline: what TIA holds now. TIA may write the object back slightly differently from the file.
+            // New baseline: what TIA holds now. TIA may write the object back differently from the file (e.g. it
+            // re-applies a faceplate's KeepRatio resizing), so list what it changed.
             var imported = info.SingleImport is not null ? SingleObject(info, context) : FindItem(FindContainer(info, item.FolderPath, context, create: false)!, info.ItemsProperty, name);
             if (imported is not null)
             {
-                var newHash = ExportHash(imported, context, label);
-                var relativeFile = item.File.Substring(context.Root.TrimEnd('\\').Length).Trim('\\').Replace('\\', '/');
-                context.Result.ManifestUpdates.Add(new HmiManifestEntry { Category = info.Category, Name = name, FolderPath = item.FolderPath, File = relativeFile, Hash = newHash, FileHash = fileHash });
-                if (newHash != fileHash)
+                string tiaFile = ExportCurrent(imported, context, label);
+                try
                 {
-                    result.Messages.Add($"  note: TIA stores {label} differently from the file (it may have adjusted or dropped a value). Export it again to see what TIA kept.");
+                    var newHash = HmiXmlHash.Compute(tiaFile, context.HashVersion);
+                    var relativeFile = item.File.Substring(context.Root.TrimEnd('\\').Length).Trim('\\').Replace('\\', '/');
+                    context.Result.ManifestUpdates.Add(new HmiManifestEntry { Category = info.Category, Name = name, FolderPath = item.FolderPath, File = relativeFile, Hash = newHash, FileHash = fileHash });
+                    if (newHash != fileHash)
+                    {
+                        var changes = HmiItemDiff.Compare(label, item.File, tiaFile, context.HashVersion);
+                        result.ItemChanges.AddRange(changes);
+                        if (changes.Count > 0)
+                        {
+                            var layout = changes.Count(c => c.IsLayout);
+                            result.Messages.Add($"  TIA changed {changes.Count} value(s) of {label} while importing it{(layout > 0 ? $", {layout} of them position/size" : string.Empty)}:");
+                            result.Messages.AddRange(changes.Select(c => "    " + c));
+                        }
+                    }
+                }
+                finally
+                {
+                    File.Delete(tiaFile);
                 }
             }
         }
@@ -343,20 +364,6 @@ public sealed class ClassicHmiImporter : IHmiImporter
         return file;
     }
 
-    /// <summary>Exports the object as it is in TIA now and hashes it the same way as the files.</summary>
-    private static string ExportHash(dynamic item, Context context, string label)
-    {
-        string file = ExportCurrent(item, context, label);
-        try
-        {
-            return HmiXmlHash.Compute(file, context.HashVersion);
-        }
-        finally
-        {
-            File.Delete(file);
-        }
-    }
-
     private static string ItemName(object item)
     {
         var type = item.GetType();
@@ -377,9 +384,11 @@ public sealed class ClassicHmiImporter : IHmiImporter
     private sealed class Context
     {
         private string? _tempFolder;
+        private Action? _beforeFirstImport;
 
-        public Context(object target, string root, object importOptions, object exportOptions, HmiImportOptions options, HmiImportResult result, int hashVersion, IProgress<string> progress, CancellationToken cancellationToken)
+        public Context(object target, string root, object importOptions, object exportOptions, HmiImportOptions options, HmiImportResult result, int hashVersion, Action beforeFirstImport, IProgress<string> progress, CancellationToken cancellationToken)
         {
+            _beforeFirstImport = beforeFirstImport;
             HashVersion = hashVersion;
             Progress = progress;
             Target = target;
@@ -403,6 +412,13 @@ public sealed class ClassicHmiImporter : IHmiImporter
 
         public IProgress<string> Progress { get; }
         public CancellationToken CancellationToken { get; }
+
+        public void RunBeforeFirstImport()
+        {
+            var action = _beforeFirstImport;
+            _beforeFirstImport = null;
+            action?.Invoke();
+        }
 
         public string TempFolder
         {

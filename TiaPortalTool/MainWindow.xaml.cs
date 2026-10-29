@@ -544,12 +544,18 @@ public partial class MainWindow : Window
             if (HmiImportService.FindHmiFolders(importFolder).Count > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                hmi = _hmiImportService.ImportAll(session.Project, assembly, importFolder, new HmiImportOptions { ResolveConflict = AskConflict }, progress, cancellationToken);
+                hmi = _hmiImportService.ImportAll(session.Project, assembly, importFolder, HmiOptions(), progress, cancellationToken);
                 messages.AddRange(hmi.Messages);
                 if (hmi.Warnings.Count > 0)
                 {
                     messages.Add($"{hmi.Warnings.Count} HMI warning(s):");
                     messages.AddRange(hmi.Warnings.Select(w => "  " + w));
+                }
+
+                if (hmi.SaveRefused)
+                {
+                    messages.Add("Project NOT saved: the HMI import lost objects or changed positions/sizes (see the warnings above).");
+                    return new OperationResult(Outcome.Error, "HMI import lost objects or changed positions/sizes. The project was not saved.", messages);
                 }
 
                 if (hmi.FailedCount > 0
@@ -655,7 +661,7 @@ public partial class MainWindow : Window
     private OperationResult RunHmiImport(string projectPath, string folder, bool saveWithErrors, IProgress<string> progress, CancellationToken cancellationToken) =>
         WithSession(projectPath, "Import HMI", progress, cancellationToken, (session, assembly) =>
         {
-            HmiImportResult result = _hmiImportService.ImportAll(session.Project, assembly, folder, new HmiImportOptions { ResolveConflict = AskConflict }, progress, cancellationToken);
+            HmiImportResult result = _hmiImportService.ImportAll(session.Project, assembly, folder, HmiOptions(), progress, cancellationToken);
             var messages = result.Messages.ToList();
             if (result.Warnings.Count > 0)
             {
@@ -669,6 +675,12 @@ public partial class MainWindow : Window
                     ? $"Nothing imported: {result.ConflictCount} object(s) were kept as they are in TIA (see the warnings)."
                     : "Nothing to import: no HMI file was changed or added since the export.";
                 return new OperationResult(result.ConflictCount > 0 ? Outcome.Warning : Outcome.Success, nothing, messages);
+            }
+
+            if (result.SaveRefused)
+            {
+                messages.Add("Project NOT saved: the import lost objects or changed positions/sizes (see the warnings above).");
+                return new OperationResult(Outcome.Error, "HMI import lost objects or changed positions/sizes. The project was not saved.", messages);
             }
 
             if (!result.CanSave
@@ -757,6 +769,58 @@ public partial class MainWindow : Window
         var save = Dispatcher.Invoke(() => MessageBox.Show(this, question, "Compile errors", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)) == MessageBoxResult.Yes;
         messages.Add(save ? "You chose to save the project with the compile errors." : "You chose not to save the project.");
         return save;
+    }
+
+    /// <summary>HMI import options for the window: every decision is a prompt.</summary>
+    private HmiImportOptions HmiOptions() => new()
+    {
+        ResolveConflict = AskConflict,
+        ConfirmLostObjects = AskLostObjects,
+        ConfirmLayoutChanges = AskLayoutChanges,
+    };
+
+    /// <summary>
+    /// The lost-object guard found objects the import deleted, or couldn't check: save anyway? Called from the import's
+    /// worker thread, so the prompt runs on the UI thread. "No" is the default.
+    /// </summary>
+    private bool AskLostObjects(HmiGuardFindings findings)
+    {
+        const int MaxShown = 15;
+        var lines = new List<string>();
+        if (findings.Problems.Count > 0)
+        {
+            lines.Add("The tool can't verify that the import deleted nothing:");
+            lines.AddRange(findings.Problems.Select(p => "  " + p));
+        }
+
+        if (findings.Lost.Count > 0)
+        {
+            lines.Add($"These objects of the compiled runtime are gone after the import ({findings.Lost.Count}):");
+            lines.AddRange(findings.Lost.Take(MaxShown).Select(l => "  " + l));
+            if (findings.Lost.Count > MaxShown)
+            {
+                lines.Add($"  ... and {findings.Lost.Count - MaxShown} more in the log");
+            }
+
+            lines.Add("Openness exports leave some objects out of the files (alarm views and trend views at least), and an import replaces the whole "
+                      + "screen or template, so it deletes them.");
+        }
+
+        var question = $"HMI {findings.RuntimeName}:\n\n{string.Join("\n", lines)}\n\n{HmiRuntimeGuard.HeuristicNote}\n\n"
+                       + "Save the project anyway?\n\nYes = save (put the objects back in TIA yourself)\nNo = don't save (the project file stays as it was)";
+        return Dispatcher.Invoke(() => MessageBox.Show(this, question, "HMI objects lost by the import", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)) == MessageBoxResult.Yes;
+    }
+
+    /// <summary>TIA changed positions or sizes while importing: save anyway? Called from the worker thread; "No" is the default.</summary>
+    private bool AskLayoutChanges(IReadOnlyList<HmiItemChange> changes)
+    {
+        const int MaxShown = 15;
+        var shown = string.Join("\n", changes.Take(MaxShown).Select(c => "  " + c))
+                    + (changes.Count > MaxShown ? $"\n  ... and {changes.Count - MaxShown} more in the log" : string.Empty);
+        var question = $"TIA changed the position or size of {changes.Count} screen item value(s) while importing, so the screens won't look like the files:\n\n{shown}\n\n"
+                       + "A faceplate with Resizing = KeepRatio, for example, is re-fitted to its ratio. Set Resizing to None in the file (or use sizes that fit "
+                       + "the ratio) to keep the file's size.\n\nSave the project anyway?\n\nYes = save with TIA's positions and sizes\nNo = don't save";
+        return Dispatcher.Invoke(() => MessageBox.Show(this, question, "HMI positions or sizes changed", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)) == MessageBoxResult.Yes;
     }
 
     /// <summary>
